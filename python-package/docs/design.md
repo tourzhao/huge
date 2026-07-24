@@ -1,6 +1,6 @@
 # Design and Roadmap
 
-## Current architecture (0.3)
+## Current architecture
 
 - Native Python core (`pyhuge/core.py`)
 - NumPy/SciPy data model

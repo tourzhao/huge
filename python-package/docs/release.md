@@ -5,7 +5,7 @@
 From `python-package`:
 
 ```bash
-python scripts/bump_version.py 0.8.x
+python scripts/bump_version.py 2.0.0
 ```
 
 This updates:
@@ -29,8 +29,8 @@ This runs:
 
 ```bash
 git add pyproject.toml pyhuge/__init__.py CHANGELOG.md
-git commit -m "pyhuge: release 0.3.1"
-git tag pyhuge-v0.3.1
+git commit -m "pyhuge: release 2.0.0"
+git tag pyhuge-v2.0.0
 git push origin <branch> --tags
 ```
 

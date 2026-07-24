@@ -8,9 +8,17 @@ on:
       - 'src/**'
       - 'man/**'
       - 'tests/**'
+      - 'data/**'
+      - 'inst/**'
       - 'DESCRIPTION'
       - 'NAMESPACE'
+      - 'CMakeLists.txt'
+      - 'cmake/**'
       - 'configure*'
+      - '.Rbuildignore'
+      - 'NEWS.md'
+      - 'vignettes/**'
+      - 'tools/**'
       - '.github/workflows/r-cmd-check.yml'
   pull_request:
     branches: [master]
@@ -19,12 +27,63 @@ on:
       - 'src/**'
       - 'man/**'
       - 'tests/**'
+      - 'data/**'
+      - 'inst/**'
       - 'DESCRIPTION'
       - 'NAMESPACE'
+      - 'CMakeLists.txt'
+      - 'cmake/**'
       - 'configure*'
+      - '.Rbuildignore'
+      - 'NEWS.md'
+      - 'vignettes/**'
+      - 'tools/**'
       - '.github/workflows/r-cmd-check.yml'
 
 jobs:
+  core-mirrors:
+    name: Shared C++ core mirror check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check shared C++ core copies are in sync
+        run: tools/check_core_mirrors.sh
+      - name: Verify the mirror checker itself fails when it should
+        run: tools/check_core_mirrors_probes.sh
+
+  core-cmake:
+    name: Standalone core install (${{ matrix.os }}, OpenMP ${{ matrix.openmp }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            openmp: 'ON'
+            expect_openmp: 'ON'
+            blas_vendor: ''
+          - os: ubuntu-latest
+            openmp: 'OFF'
+            expect_openmp: 'OFF'
+            blas_vendor: ''
+          - os: macos-latest
+            openmp: 'OFF'
+            expect_openmp: 'OFF'
+            blas_vendor: 'Apple'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install BLAS
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y libopenblas-dev
+      - name: Build, install, and consume static and shared libraries
+        env:
+          HUGE_CMAKE_SMOKE_OPENMP: ${{ matrix.openmp }}
+          HUGE_CMAKE_SMOKE_EXPECT_OPENMP: ${{ matrix.expect_openmp }}
+          HUGE_CMAKE_SMOKE_BLA_VENDOR: ${{ matrix.blas_vendor }}
+        run: tools/check_cmake_install.sh
+
   check:
     name: R CMD check (${{ matrix.os }}, R ${{ matrix.r }})
     runs-on: ${{ matrix.os }}
@@ -62,4 +121,25 @@ jobs:
           build_args: 'c("--no-manual", "--no-build-vignettes")'
           args: 'c("--no-manual", "--no-build-vignettes", "--no-vignettes")'
           error-on: '"error"'
+          upload-snapshots: true
+
+  strict-source:
+    name: Clean source package with vignettes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: release
+          use-public-rspm: true
+      - uses: r-lib/actions/setup-tinytex@v2
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::rcmdcheck
+          needs: check
+      - uses: r-lib/actions/check-r-package@v2
+        with:
+          build_args: 'c("--no-manual")'
+          args: 'c("--no-manual")'
+          error-on: '"warning"'
           upload-snapshots: true

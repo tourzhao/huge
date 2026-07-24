@@ -47,16 +47,28 @@ struct GlassoResult {
     std::vector<Matrix> path;     // nlambda x (d,d)
     std::vector<Matrix> icov;     // nlambda x (d,d)
     std::vector<Matrix> cov;      // nlambda x (d,d); empty if !cov_output
+    // True when any solver loop exhausted its iteration budget anywhere on
+    // the path: results are then best-effort, not converged to tolerance.
+    bool hit_max_iter = false;
 };
 
 GlassoResult glasso(const double* S_colmajor, int d,
                     const double* lambda, int nlambda,
                     bool scr, bool cov_output);
 
+// Adapter-oriented variant that leaves GlassoResult::path empty.  The graph
+// support is exactly the off-diagonal nonzero pattern of icov, so language
+// bindings can derive their compact path output without retaining a second
+// dense double matrix path inside the core result.
+GlassoResult glasso_compact(const double* S_colmajor, int d,
+                            const double* lambda, int nlambda,
+                            bool scr, bool cov_output);
+
 // ---- MB graph -----------------------------------------------------------
 
 struct MBResult {
     std::vector<ColResult> columns; // size d
+    bool hit_max_iter = false;      // any requested point was not certified
 };
 
 MBResult mb(const double* S_colmajor, int d,
@@ -64,6 +76,8 @@ MBResult mb(const double* S_colmajor, int d,
 
 MBResult mb_scr(const double* S_colmajor, int d,
                 const double* lambda, int nlambda,
+                // Column-major nscr-by-d matrix of distinct zero-based
+                // predictors; each column excludes its response index.
                 const int* idx_scr, int nscr);
 
 // ---- TIGER (sqrt-lasso) -------------------------------------------------
@@ -71,10 +85,23 @@ MBResult mb_scr(const double* S_colmajor, int d,
 struct TigerResult {
     std::vector<ColResult> columns; // size d
     std::vector<Matrix>    icov;    // nlambda x (d,d)
+    std::vector<double>    lambda;  // actual path used by the native solver
+    bool hit_max_iter = false;      // any column exhausted an iteration budget
+    bool path_truncated = false;    // generated path kept only its certified prefix
 };
 
+// Legacy raw-sample entry point retained while language adapters migrate to
+// the correlation-domain implementation below.
 TigerResult tiger(const double* data_colmajor, int n, int d,
                   const double* lambda, int nlambda);
+
+// Build a correlation matrix from either raw n-by-d observations or a d-by-d
+// covariance/correlation matrix, generate the default lambda path when
+// lambda == nullptr, and solve TIGER entirely in the correlation domain.
+TigerResult tiger_fit(const double* input_colmajor, int n, int d,
+                      bool covariance_input,
+                      const double* lambda, int nlambda,
+                      double lambda_min_ratio);
 
 // ---- RIC ----------------------------------------------------------------
 

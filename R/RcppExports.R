@@ -9,16 +9,20 @@ SFGen <- function(d0, d) {
     .Call(`_huge_SFGen`, d0, d)
 }
 
-SPMBscr <- function(S, lambda, nlambda, d, maxdf, idx_scr, nscr) {
-    .Call(`_huge_SPMBscr`, S, lambda, nlambda, d, maxdf, idx_scr, nscr)
+SPMBscr <- function(S, lambda, nlambda, d, idx_scr, nscr) {
+    .Call(`_huge_SPMBscr`, S, lambda, nlambda, d, idx_scr, nscr)
 }
 
-SPMBgraph <- function(S, lambda, nlambda, d, maxdf) {
-    .Call(`_huge_SPMBgraph`, S, lambda, nlambda, d, maxdf)
+SPMBgraph <- function(S, lambda, nlambda, d) {
+    .Call(`_huge_SPMBgraph`, S, lambda, nlambda, d)
 }
 
 SPMBgraphsqrt <- function(data, lambda, nlambda, d) {
     .Call(`_huge_SPMBgraphsqrt`, data, lambda, nlambda, d)
+}
+
+SPMBgraphsqrtFit <- function(input, lambda, nlambda, d, covariance_input, lambda_min_ratio) {
+    .Call(`_huge_SPMBgraphsqrtFit`, input, lambda, nlambda, d, covariance_input, lambda_min_ratio)
 }
 
 hugeglasso <- function(S, lambda, scr, verbose, cov_output) {

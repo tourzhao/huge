@@ -9,22 +9,42 @@ huge.ct(
   nlambda = NULL,
   lambda.min.ratio = NULL,
   lambda = NULL,
-  verbose = TRUE
+  verbose = TRUE,
+  input.type = "auto"
 )
 }
 \arguments{
 \item{x}{There are 2 options: (1) \code{x} is an \code{n} by \code{d} data matrix (2) a \code{d} by \code{d} sample covariance matrix. The program automatically identifies the input matrix by checking the symmetry. (\code{n} is the sample size and \code{d} is the dimension).}
 
-\item{nlambda}{The number of regularization/thresholding parameters. The default value is \code{30} for \code{method = "ct"} and \code{10} for \code{method = "mb"}, \code{"glasso"} or \code{"tiger"}.}
+\item{nlambda}{The number of regularization/thresholding parameters. The default value is \code{20} for \code{method = "ct"} and \code{10} for \code{method = "mb"}, \code{"glasso"} or \code{"tiger"}.}
 
 \item{lambda.min.ratio}{If \code{method = "mb"}, \code{"glasso"} or \code{"tiger"}, it is the smallest value for \code{lambda}, as a fraction of the upperbound (\code{MAX}) of the regularization/thresholding parameter which makes all estimates equal to \code{0}. The program can automatically generate \code{lambda} as a sequence of length = \code{nlambda} starting from \code{MAX} to \code{lambda.min.ratio*MAX} in log scale. If \code{method = "ct"}, it is the largest sparsity level for estimated graphs. The program can automatically generate \code{lambda} as a sequence of length = \code{nlambda}, which makes the sparsity level of the graph path increases from \code{0} to \code{lambda.min.ratio} evenly.The default value is \code{0.1} when \code{method = "mb"}, \code{"glasso"} or \code{"tiger"}, and 0.05 when \code{method = "ct"}.}
 
-\item{lambda}{A sequence of decreasing positive numbers to control the regularization when \code{method = "mb"}, \code{"glasso"} or \code{"tiger"}, or the thresholding in \code{method = "ct"}. Typical usage is to leave the input \code{lambda = NULL} and have the program compute its own \code{lambda} sequence based on \code{nlambda} and \code{lambda.min.ratio}. Users can also specify a sequence to override this. When \code{method = "mb"}, \code{"glasso"} or \code{"tiger"}, use with care - it is better to supply a decreasing sequence values than a single (small) value.}
+\item{lambda}{A numeric scalar or non-empty one-dimensional numeric input
+of finite, non-negative thresholds. Values are applied in the supplied
+order, and zero is allowed. Leave
+\code{lambda = NULL} to generate a path from \code{nlambda} and
+\code{lambda.min.ratio}.}
 
 \item{verbose}{If \code{verbose = FALSE}, tracing information printing is disabled. The default value is \code{TRUE}.}
+
+\item{input.type}{How to interpret \code{x}: \code{"auto"} preserves
+symmetry-based detection, \code{"data"} forces an observation matrix,
+and \code{"covariance"} requires a square covariance or correlation
+matrix.}
 }
 \description{
 See more details in \code{\link{huge}}
+}
+\details{
+The default path targets increasing numbers of undirected edges
+  and defines each graph by the strict rule
+  \code{abs(correlation) > lambda}. Equal-weight edges are never split, so
+  ties can make the realized sparsity smaller than the nominal target.
+  Reusing the returned \code{lambda} values therefore reconstructs the
+  same path. When \code{lambda = NULL}, \code{nlambda} must be a positive
+  integer and \code{lambda.min.ratio} must lie in \code{(0, 1]}. Supplying
+  \code{lambda} overrides those two arguments.
 }
 \seealso{
 \code{\link{huge}}, and \code{\link{huge-package}}.

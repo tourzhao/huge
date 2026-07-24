@@ -12,7 +12,7 @@
 \item{\dots}{System reserved (No specific usage)}
 }
 \description{
-Visualize the covariance matrix, the empirical covariance matrix, the adjacency matrix and the graph pattern of the true graph structure.
+Visualize the covariance matrix, the empirical correlation matrix, the adjacency matrix and the graph pattern of the true graph structure.
 }
 \seealso{
 \code{\link{huge.generator}} and \code{\link{huge}}

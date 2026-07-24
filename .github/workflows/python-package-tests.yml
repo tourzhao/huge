@@ -4,18 +4,31 @@ on:
   push:
     paths:
       - "python-package/**"
+      - "tools/**"
       - ".github/workflows/python-package-tests.yml"
+      - ".github/workflows/python-package-release.yml"
   pull_request:
     paths:
       - "python-package/**"
+      - "tools/**"
       - ".github/workflows/python-package-tests.yml"
+      - ".github/workflows/python-package-release.yml"
 
 jobs:
+  core-mirrors:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check shared C++ core copies are in sync
+        run: tools/check_core_mirrors.sh
+      - name: Verify the mirror checker itself fails when it should
+        run: tools/check_core_mirrors_probes.sh
+
   unit:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12"]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -30,7 +43,32 @@ jobs:
       - name: Run unit tests
         run: |
           cd python-package
-          pytest tests/test_public_api.py tests/test_core_unit.py tests/test_runtime_errors.py tests/test_native_smoke.py
+          pytest tests/test_public_api.py tests/test_core_unit.py \
+            tests/test_runtime_errors.py tests/test_native_smoke.py \
+            tests/test_native_symbols.py tests/test_packaging_contract.py \
+            tests/test_cmake_contract.py tests/test_r_build_contract.py
+
+  minimum-dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+      - name: Install system BLAS
+        run: sudo apt-get update && sudo apt-get install -y libopenblas-dev
+      - name: Install declared minimum dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install "setuptools>=77" wheel "pybind11>=2.11" "numpy==1.23.5" "scipy==1.9.3" "pytest>=7.4,<9"
+          pip install --no-build-isolation --no-deps -e ./python-package
+      - name: Run minimum-dependency contract tests
+        run: |
+          cd python-package
+          pytest tests/test_public_api.py tests/test_core_unit.py \
+            tests/test_runtime_errors.py tests/test_native_smoke.py \
+            tests/test_native_symbols.py tests/test_packaging_contract.py \
+            tests/test_cmake_contract.py tests/test_r_build_contract.py
 
   e2e-native:
     runs-on: ubuntu-latest
@@ -76,9 +114,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e "./python-package[test,viz,runtime]"
-      - name: Run native-vs-R parity tests
+      - name: Run full Python suite against the current R package
         env:
           R_LIBS_USER: ${{ github.workspace }}/.Rlib
         run: |
           cd python-package
-          pytest -q tests/test_native_vs_r_parity.py -rA
+          pytest -q -rA

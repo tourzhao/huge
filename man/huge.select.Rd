@@ -11,13 +11,14 @@ huge.select(
   stars.thresh = 0.1,
   stars.subsample.ratio = NULL,
   rep.num = 20,
+  num.cores = 1,
   verbose = TRUE
 )
 }
 \arguments{
 \item{est}{An object with S3 class \code{"huge"}.}
 
-\item{criterion}{Model selection criterion. \code{"ric"} and \code{"stars"} are available for all 4 graph estimation methods. \code{ebic} is only applicable when \code{est$method = "glasso"} in \code{huge()}. The default value is \code{"ric"}.}
+\item{criterion}{Model selection criterion. \code{"ric"} is available for all four estimation methods, \code{"stars"} for \code{"mb"}, \code{"ct"}, and \code{"glasso"}, and \code{"ebic"} only for \code{"glasso"}. Defaults are \code{"ric"} for \code{"mb"} and \code{"tiger"}, \code{"stars"} for \code{"ct"}, and \code{"ebic"} for \code{"glasso"}.}
 
 \item{ebic.gamma}{The tuning parameter for ebic. The default value is 0.5. Only applicable when \code{est$method = "glasso"} and \code{criterion = "ebic"}.}
 
@@ -26,6 +27,8 @@ huge.select(
 \item{stars.subsample.ratio}{The subsampling ratio. The default value is \code{10*sqrt(n)/n} when \code{n>144} and \code{0.8} when \code{n<=144}, where \code{n} is the sample size. Only applicable when \code{criterion = "stars"}.}
 
 \item{rep.num}{The number of subsamplings when \code{criterion = "stars"} or rotations when \code{criterion = "ric"}. The default value is \code{20}. NOT applicable when \code{criterion = "ebic"}.}
+
+\item{num.cores}{The number of CPU cores used to fit the stars subsamplings in parallel via \code{parallel::mclapply}. The default value is \code{1} (serial). Values greater than 1 use process forking and are ignored on Windows. Each worker may also start OpenMP or BLAS threads, so \code{num.cores = 1} is the portable choice when a bounded thread budget or fork safety matters. Results are identical to the serial path for the same random seed. Only applicable when \code{criterion = "stars"}.}
 
 \item{verbose}{If \code{verbose = FALSE}, tracing information printing is disabled. The default value is \code{TRUE}.}
 }
@@ -65,7 +68,9 @@ and anything else included in the input \code{est}
 Implements the regularization parameter selection for high dimensional undirected graph estimation. The optional approaches are rotation information criterion (ric), stability approach to regularization selection (stars) and extended Bayesian information criterion (ebic).
 }
 \details{
-Stability approach to regularization selection (stars) is a natural way to select optimal regularization parameter for all four estimation methods. It selects the optimal graph by variability of subsamplings and tends to overselect edges in Gaussian graphical models. Besides selecting the regularization parameters, stars can also provide an additional estimated graph by merging the corresponding subsampled graphs using the frequency counts. The subsampling procedure in stars may NOT be very efficient, we also provide the recent developed highly efficient, rotation information criterion approach (ric). Instead of tuning over a grid by cross-validation or subsampling, we directly estimate the optimal regularization parameter based on random Rotations. However, ric usually has very good empirical performances but suffers from underselections sometimes. Therefore, we suggest if user are sensitive of false negative rates, they should either consider increasing \code{rep.num} or applying the stars to model selection. Extended Bayesian information criterion (ebic) is another competitive approach, but the \code{ebic.gamma} can only be tuned by experience.
+Stability approach to regularization selection (stars) selects the optimal graph by variability of subsamplings and tends to overselect edges in Gaussian graphical models. It is available for \code{"mb"}, \code{"ct"}, and \code{"glasso"}. TIGER can certify different lambda-path prefixes on different subsamples, so TIGER with stars is rejected until a common certified-prefix protocol is available; use \code{"ric"} for TIGER. Besides selecting the regularization parameters, stars can also provide an additional estimated graph by merging the corresponding subsampled graphs using the frequency counts. The subsampling procedure in stars may NOT be very efficient, we also provide the recent developed highly efficient, rotation information criterion approach (ric). Instead of tuning over a grid by cross-validation or subsampling, we directly estimate the optimal regularization parameter based on random Rotations. However, ric usually has very good empirical performances but suffers from underselections sometimes. Therefore, we suggest if user are sensitive of false negative rates, they should either consider increasing \code{rep.num} or applying the stars to model selection where supported. Extended Bayesian information criterion (ebic) is another competitive approach, but the \code{ebic.gamma} can only be tuned by experience.
+
+For \code{criterion = "stars"}, \code{est$lambda} must be non-increasing; tied values are allowed.
 }
 \note{
 The model selection is NOT available when the data input is the sample covariance matrix.

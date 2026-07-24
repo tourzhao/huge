@@ -9,7 +9,7 @@ huge.roc(path, theta, verbose = TRUE)
 \arguments{
 \item{path}{A graph path.}
 
-\item{theta}{The true graph structure.}
+\item{theta}{The true graph structure, containing at least one edge and one absent off-diagonal edge.}
 
 \item{verbose}{If \code{verbose = FALSE}, tracing information printing is disabled. The default value is \code{TRUE}.}
 }
@@ -35,7 +35,7 @@ Draws ROC curve for a graph path according to the true graph structure.
 To avoid the horizontal oscillation, false positive rates is automatically sorted in the ascent order and true positive rates also follow the same order.
 }
 \note{
-For a lasso regression,  the number of nonzero coefficients is at most \code{n-1}. If \code{d>>n}, even when regularization parameter is very small, the estimated graph may still be sparse. In this case, the AUC may not be a good choice to evaluate the performance.
+ROC/AUC is undefined when \code{theta} contains only edges or only non-edges, so those one-class truth matrices are rejected. For a lasso regression, the number of nonzero coefficients is at most \code{n-1}. If \code{d>>n}, even when regularization parameter is very small, the estimated graph may still be sparse. In this case, the AUC may not be a good choice to evaluate the performance.
 }
 \examples{
 #generate data

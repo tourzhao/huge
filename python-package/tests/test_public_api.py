@@ -1,4 +1,4 @@
-"""Public API smoke tests for pyhuge 0.3 native package."""
+"""Public API smoke tests for the native pyhuge package."""
 
 from __future__ import annotations
 

@@ -1,19 +1,32 @@
 # Performance Notes
 
-`pyhuge` 0.3 runtime is dominated by numerical solver cost.
+`pyhuge` runtime is dominated by the C++ solver cost; the Python layer adds
+little overhead.
 
 ## Practical guidance
 
 - Use `ct` for fast threshold-style path baselines.
 - Use `mb` or `glasso` when selection quality matters more than raw speed.
 - `stars` is slower than `ric`/`ebic` because it resamples repeatedly.
+  `n_jobs > 1` runs subsample fits concurrently, but each native fit may
+  already use OpenMP and threaded BLAS. Benchmark on the target runtime;
+  `n_jobs=1` is usually the safest choice for an OpenMP-enabled build and
+  avoids nested oversubscription.
+- `ric` selection is fast (BLAS matrix products in the core, ~10x faster than
+  0.8.x at d=2000).
 - Reuse transformed data from `huge_npn(...)` when running multiple methods.
 
-## Optional acceleration
+## Multicore builds
 
-`pyhuge._native_core` accelerates selected kernels (e.g., threshold path/sparsity).
+The core parallelizes per-column solvers with OpenMP when the extension is
+built with it (automatic when a toolkit is present; on macOS install
+Homebrew's `libomp` first — see [Installation](installation.md)). A serial
+build is typically 4-6x slower for `mb`/`tiger` on multicore machines.
 
-Check availability:
+## The native core
+
+`mb`, `glasso`, and `tiger` require the native extension
+(`pyhuge._native_core`); it is not optional for the estimators. Check:
 
 ```python
 import pyhuge

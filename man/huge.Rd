@@ -14,15 +14,22 @@ huge(
   scr.num = NULL,
   cov.output = FALSE,
   sym = "or",
-  verbose = TRUE
+  verbose = TRUE,
+  input.type = "auto"
 )
 }
 \arguments{
 \item{x}{There are 2 options: (1) \code{x} is an \code{n} by \code{d} data matrix (2) a \code{d} by \code{d} sample covariance matrix. The program automatically identifies the input matrix by checking the symmetry. (\code{n} is the sample size and \code{d} is the dimension).}
 
-\item{lambda}{A sequence of decreasing positive numbers to control the regularization when \code{method = "mb"}, \code{"glasso"} or \code{"tiger"}, or the thresholding in \code{method = "ct"}. Typical usage is to leave the input \code{lambda = NULL} and have the program compute its own \code{lambda} sequence based on \code{nlambda} and \code{lambda.min.ratio}. Users can also specify a sequence to override this. When \code{method = "mb"}, \code{"glasso"} or \code{"tiger"}, use with care - it is better to supply a decreasing sequence values than a single (small) value.}
+\item{lambda}{An optional numeric scalar or non-empty one-dimensional
+numeric path. For \code{method = "mb"}, \code{"glasso"}, or
+\code{"tiger"}, values must be finite, strictly
+positive, and non-increasing; ties are allowed. For \code{method = "ct"},
+values must be finite and non-negative, zero is allowed, and thresholds
+are applied in the supplied order. Leave \code{lambda = NULL} to generate
+a path from \code{nlambda} and \code{lambda.min.ratio}.}
 
-\item{nlambda}{The number of regularization/thresholding parameters. The default value is \code{30} for \code{method = "ct"} and \code{10} for \code{method = "mb"}, \code{"glasso"} or \code{"tiger"}.}
+\item{nlambda}{The number of regularization/thresholding parameters. The default value is \code{20} for \code{method = "ct"} and \code{10} for \code{method = "mb"}, \code{"glasso"} or \code{"tiger"}.}
 
 \item{lambda.min.ratio}{If \code{method = "mb"}, \code{"glasso"} or \code{"tiger"}, it is the smallest value for \code{lambda}, as a fraction of the upperbound (\code{MAX}) of the regularization/thresholding parameter which makes all estimates equal to \code{0}. The program can automatically generate \code{lambda} as a sequence of length = \code{nlambda} starting from \code{MAX} to \code{lambda.min.ratio*MAX} in log scale. If \code{method = "ct"}, it is the largest sparsity level for estimated graphs. The program can automatically generate \code{lambda} as a sequence of length = \code{nlambda}, which makes the sparsity level of the graph path increases from \code{0} to \code{lambda.min.ratio} evenly.The default value is \code{0.1} when \code{method = "mb"}, \code{"glasso"} or \code{"tiger"}, and 0.05 when \code{method = "ct"}.}
 
@@ -37,6 +44,11 @@ huge(
 \item{sym}{Symmetrize the output graphs. If \code{sym = "and"}, the edge between node \code{i} and node \code{j} is selected ONLY when both node \code{i} and node \code{j} are selected as neighbors for each other. If \code{sym = "or"}, the edge is selected when either node \code{i} or node \code{j} is selected as the neighbor for each other. The default value is \code{"or"}. ONLY applicable when \code{method = "mb"} or \code{"tiger"}.}
 
 \item{verbose}{If \code{verbose = FALSE}, tracing information printing is disabled. The default value is \code{TRUE}.}
+
+\item{input.type}{How to interpret \code{x}: \code{"auto"} preserves
+symmetry-based detection, \code{"data"} forces an observation matrix,
+and \code{"covariance"} requires a square covariance or correlation
+matrix. Use \code{"data"} for square symmetric observation matrices.}
 }
 \value{
 An object with S3 class \code{"huge"} is returned:
@@ -47,7 +59,7 @@ An object with S3 class \code{"huge"} is returned:
   An indicator of the sample covariance.
 }
 \item{ind.mat}{
-  The \code{scr.num} by \code{k} matrix with each column corresponding to a variable in \code{ind.group} and contains the indices of the remaining neighbors after the screening. ONLY applicable when \code{scr = TRUE}.
+  The \code{scr.num} by \code{d} matrix with each column containing the indices of the remaining neighbors of the corresponding variable after the lossy screening. ONLY applicable when \code{scr = TRUE}.
 }
 \item{lambda}{
   The sequence of regularization parameters used in mb or thresholding parameters in ct.
@@ -59,7 +71,7 @@ An object with S3 class \code{"huge"} is returned:
   The \code{scr} from the input. ONLY applicable when \code{method = "mb"} or \code{"glasso"}.
 }
 \item{path}{
-  A list of \code{k} by \code{k} adjacency matrices of estimated graphs as a graph path corresponding to \code{lambda}.
+  A list of \code{d} by \code{d} adjacency matrices of estimated graphs as a graph path corresponding to \code{lambda}.
 }
 \item{sparsity}{
   The sparsity levels of the graph path.
@@ -74,7 +86,7 @@ An object with S3 class \code{"huge"} is returned:
   The method used in the graph estimation stage.
 }
 \item{df}{
-  If \code{method = "mb"} or \code{"tiger"}, it is a \code{k} by \code{nlambda} matrix. Each row contains the number of nonzero coefficients along the lasso solution path. If \code{method = "glasso"}, it is a \code{nlambda} dimensional vector containing the number of nonzero coefficients along the graph path \code{icov}.
+  If \code{method = "mb"} or \code{"tiger"}, it is a \code{d} by \code{nlambda} matrix. Each row contains the number of nonzero coefficients along the lasso solution path. If \code{method = "glasso"}, it is a \code{nlambda} dimensional vector containing the number of nonzero coefficients along the graph path \code{icov}.
 }
 \item{loglik}{
   A \code{nlambda} dimensional vector containing the likelihood scores along the graph path (\code{icov}). ONLY applicable when \code{method = "glasso"}. For an estimated inverse covariance Z, the program only calculates log(det(Z)) - trace(SZ) where S is the empirical covariance matrix. For the likelihood for n observations, please multiply by n/2.
@@ -99,28 +111,6 @@ out1
 plot(out1)         #Not aligned
 plot(out1, align = TRUE) #Aligned
 huge.plot(out1$path[[3]])
-
-#graph path estimation using the sample covariance matrix as the input.
-#out1 = huge(cor(L$data), method = "glasso")
-#out1
-#plot(out1)         #Not aligned
-#plot(out1, align = TRUE) #Aligned
-#huge.plot(out1$path[[3]])
-
-#graph path estimation using ct
-#out2 = huge(L$data,method = "ct")
-#out2
-#plot(out2)
-
-#graph path estimation using glasso
-#out3 = huge(L$data, method = "glasso")
-#out3
-#plot(out3)
-
-#graph path estimation using tiger
-#out4 = huge(L$data, method = "tiger")
-#out4
-#plot(out4)
 }
 \seealso{
 \code{\link{huge.generator}}, \code{\link{huge.select}}, \code{\link{huge.plot}}, \code{\link{huge.roc}}, and \code{\link{huge-package}}.

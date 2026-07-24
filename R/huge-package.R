@@ -5,6 +5,7 @@
 #' @importFrom graphics par image plot lines
 #' @importFrom grDevices postscript gray.colors dev.off
 #' @importFrom Matrix Matrix
+#' @importFrom parallel mclapply
 #' @importFrom utils flush.console
 #' @importFrom MASS mvrnorm
 #' @importFrom igraph graph_from_adjacency_matrix layout_with_fr

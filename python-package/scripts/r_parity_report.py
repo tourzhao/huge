@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate a native-vs-R parity report for pyhuge 0.3."""
+"""Generate a native-vs-R parity report for pyhuge."""
 
 from __future__ import annotations
 

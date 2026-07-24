@@ -12,6 +12,7 @@ from pyhuge import (
     huge_npn,
     huge_roc,
     huge_select,
+    huge_tiger,
 )
 
 
@@ -40,6 +41,17 @@ def test_native_mb_glasso_select_runs():
     assert sel_ebic.opt_icov is not None
 
 
+def test_native_tiger_runs():
+    x = np.random.default_rng(4).normal(size=(60, 12))
+
+    fit = huge_tiger(x, lambda_=[0.5], backend="native", verbose=False)
+
+    assert fit.method == "tiger"
+    assert len(fit.path) == 1
+    assert fit.icov is not None and len(fit.icov) == 1
+    np.testing.assert_array_equal(fit.lambda_path, np.asarray([0.5]))
+
+
 def test_native_generator_roc_inference_runs():
     sim = huge_generator(n=70, d=10, graph="hub", g=2, random_state=1)
     fit = huge(sim.data, method="ct", nlambda=4, backend="native")
@@ -51,6 +63,63 @@ def test_native_generator_roc_inference_runs():
     out = huge_inference(sim.data, t, sim.theta, alpha=0.05, type_="Gaussian")
     assert out.p.shape == (10, 10)
     assert 0.0 <= out.error <= 1.0
+
+
+def test_native_inference_matches_r_fixture():
+    x = np.asarray(
+        [
+            [0, 1, 2],
+            [1, 0, 1],
+            [2, 1, 0],
+            [3, 2, 1],
+            [1, 2, 3],
+            [2, 2, 1],
+        ],
+        dtype=float,
+    )
+    t_mat = np.asarray(
+        [[1.5, 0.2, -0.1], [0.2, 1.2, 0.15], [-0.1, 0.15, 1.4]],
+        dtype=float,
+    )
+    adj = np.asarray([[0, 1, 0], [1, 0, 0], [0, 0, 0]], dtype=float)
+    expected = {
+        ("Gaussian", "score"): (
+            np.asarray(
+                [
+                    [0.7585391313693459, 0.12818790275067804, 0.07685037046833898],
+                    [0.12818790275067804, 0.3922925958633643, 0.4309175708833086],
+                    [0.07685037046833898, 0.4309175708833086, 0.5091503125479249],
+                ]
+            ),
+            2.0 / 9.0,
+        ),
+        ("Nonparanormal", "score"): (
+            np.asarray(
+                [
+                    [0.7731215776133444, 0.020526136230479386, 1.8427772836782097e-5],
+                    [0.013640212724985279, 0.5574997855046242, 0.32142866625856015],
+                    [1.4224743399404716e-5, 0.345341799696653, 0.8921437867572235],
+                ]
+            ),
+            2.0 / 9.0,
+        ),
+        ("Nonparanormal", "wald"): (
+            np.asarray(
+                [
+                    [2.637889906509372e-13, 2.217154559533974e-4, 0.04457812277415374],
+                    [2.217154559533974e-4, 0.0, 0.0],
+                    [0.04457812277415374, 0.0, 7.038813976123493e-14],
+                ]
+            ),
+            4.0 / 9.0,
+        ),
+    }
+
+    for key, (expected_p, expected_error) in expected.items():
+        out = huge_inference(x, t_mat, adj, alpha=0.1, type_=key[0], method=key[1])
+        assert np.allclose(out.p, expected_p, rtol=2e-11, atol=5e-13)
+        assert out.error == pytest.approx(expected_error, abs=1e-15)
+        assert np.array_equal(out.data, x)
 
 
 def test_native_npn_modes():

@@ -1,0 +1,23 @@
+@PACKAGE_INIT@
+
+if(CMAKE_VERSION VERSION_LESS 3.18)
+    set(huge_FOUND FALSE)
+    set(
+        huge_NOT_FOUND_MESSAGE
+        "huge requires CMake 3.18 or newer for its BLAS dependency target"
+    )
+    return()
+endif()
+
+include(CMakeFindDependencyMacro)
+if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.22)
+    set(BLA_SIZEOF_INTEGER 4)
+endif()
+find_dependency(BLAS)
+
+if(@HUGE_WITH_OPENMP@)
+    find_dependency(OpenMP COMPONENTS CXX)
+endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/hugeTargets.cmake")
+check_required_components(huge)

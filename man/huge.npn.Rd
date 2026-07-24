@@ -25,11 +25,11 @@ huge.npn(
 }
 \value{
 \item{data}{
-A \code{d} by \code{d} nonparanormal correlation matrix if \code{npn.func = "skeptic"}, and A \code{n} by \code{d} data matrix representing \code{n} observations in \code{d} transformed dimensions other wise.
+A \code{d} by \code{d} nonparanormal correlation matrix if \code{npn.func = "skeptic"}, and A \code{n} by \code{d} data matrix representing \code{n} observations in \code{d} transformed dimensions otherwise.
 }
 }
 \description{
-Implements the Gausianization to help relax the assumption of normality.
+Implements the Gaussianization to help relax the assumption of normality.
 }
 \details{
 The nonparanormal extends Gaussian graphical models to semiparametric Gaussian copula models.Motivated by sparse additive models, the nonparanormal method estimates the Gaussian copula by marginally transforming the variables using smooth functions.Computationally, the estimation of a nonparanormal transformation is very efficient and only requires one pass of the data matrix.
@@ -45,7 +45,7 @@ Q = huge.npn(L$data)
 # transform the non-Gaussian data using the truncated ECDF
 Q = huge.npn(L$data, npn.func = "truncation")
 
-# transform the non-Gaussian data using the truncated ECDF
+# estimate the nonparanormal correlation matrix using the skeptic estimator
 Q = huge.npn(L$data, npn.func = "skeptic")
 }
 \seealso{

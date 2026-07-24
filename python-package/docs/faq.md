@@ -1,8 +1,8 @@
 # FAQ
 
-## Is `pyhuge` 0.3 pure Python?
+## Is `pyhuge` pure Python?
 
-Yes. `pyhuge` 0.3 is native Python and does not require `rpy2`.
+Yes. `pyhuge` is native Python and does not require `rpy2`. The `mb`/`glasso`/`tiger` estimators require the bundled C++ extension (built automatically on install).
 
 ## `runtime=False` in `pyhuge.test()` means what?
 
@@ -30,8 +30,11 @@ Use `method="mb"` first. Then compare with `method="glasso"`.
 ## Which selection criterion should I use?
 
 - `ric`: fast and simple
-- `stars`: stability-focused, slower
+- `stars`: stability-focused, slower; currently for MB, CT, and glasso
 - `ebic`: common for glasso
+
+Use `ric` for TIGER. StARS is rejected for TIGER until all subsample fits can
+report a common certified lambda-path prefix.
 
 ## Why is plotting failing?
 
@@ -49,8 +52,12 @@ export MPLBACKEND=Agg
 
 ## Can input be covariance/correlation matrix?
 
-Yes. For `ct` and `glasso`, `huge(...)` accepts square covariance/correlation input.
-For `mb` and `tiger`, use raw data matrix (`n x d`).
+Yes. For `ct`, `glasso`, and `tiger`, `huge(...)` accepts square
+covariance/correlation input. For `mb`, use a raw data matrix (`n x d`).
+The compatible default `input_type="auto"` detects covariance input by
+symmetry. If observations happen to form a square symmetric matrix, pass
+`input_type="data"` explicitly; use `"covariance"` to require covariance
+routing and validation.
 
 ## Is there a built-in dataset?
 
