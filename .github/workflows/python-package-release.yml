@@ -7,39 +7,253 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  verify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Build distributions
+      - name: Validate tag and package versions
+        if: startsWith(github.ref, 'refs/tags/')
+        working-directory: python-package
+        run: |
+          python - <<'PY'
+          import os
+          import pathlib
+          import tomllib
+
+          root = pathlib.Path(".")
+          version = tomllib.loads(
+              (root / "pyproject.toml").read_text(encoding="utf-8")
+          )["project"]["version"]
+          tag = os.environ["GITHUB_REF_NAME"]
+          init_text = (root / "pyhuge/__init__.py").read_text(encoding="utf-8")
+          changelog = (root / "CHANGELOG.md").read_text(encoding="utf-8")
+          assert tag == f"pyhuge-v{version}", (tag, version)
+          assert f'__version__ = "{version}"' in init_text
+          assert f"## {version}" in changelog
+          PY
+      - uses: r-lib/actions/setup-r@v2
+      - name: Install system BLAS
+        run: sudo apt-get update && sudo apt-get install -y libopenblas-dev
+      - name: Install R package dependencies
+        env:
+          R_LIBS_USER: ${{ github.workspace }}/.Rlib
+        run: |
+          mkdir -p "${R_LIBS_USER}"
+          R -q -e 'install.packages(c("Rcpp", "igraph", "Matrix", "MASS"), repos="https://cloud.r-project.org")'
+      - name: Install local huge package into isolated R library
+        env:
+          R_LIBS_USER: ${{ github.workspace }}/.Rlib
+        run: R CMD INSTALL "${GITHUB_WORKSPACE}"
+      - name: Install Python test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e "./python-package[test,viz,runtime]"
+      - name: Check shared C++ core mirrors
+        run: tools/check_core_mirrors.sh
+      - name: Run full Python suite against the current R package
+        env:
+          R_LIBS_USER: ${{ github.workspace }}/.Rlib
+        run: |
+          cd python-package
+          pytest -q -rA
+
+  sdist:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install source-distribution tools
         working-directory: python-package
         run: |
           python -m pip install --upgrade pip
-          pip install build twine
-          python -m build
-          python -m twine check dist/*
-      - name: Upload dist artifacts
+          python -m pip install build twine
+      - name: Build source distribution
+        working-directory: python-package
+        run: python -m build --sdist --outdir dist
+      - name: Validate source distribution
+        working-directory: python-package
+        run: python -m twine check dist/*.tar.gz
+      - name: Install and smoke-test source distribution
+        env:
+          SDIST_VENV: ${{ runner.temp }}/pyhuge-sdist-venv
+        run: |
+          set -euo pipefail
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends libopenblas-dev
+
+          mapfile -t sdists < <(
+            find "${GITHUB_WORKSPACE}/python-package/dist" \
+              -maxdepth 1 -type f -name 'pyhuge-*.tar.gz'
+          )
+          test "${#sdists[@]}" -eq 1
+
+          python -m venv "${SDIST_VENV}"
+          "${SDIST_VENV}/bin/python" -m pip install --upgrade pip
+          "${SDIST_VENV}/bin/python" -m pip install \
+            --no-cache-dir "${sdists[0]}"
+
+          cd "${RUNNER_TEMP}"
+          "${SDIST_VENV}/bin/python" -I - <<'PY'
+          import os
+          from pathlib import Path
+
+          import numpy as np
+          import pyhuge
+          import pyhuge._native_core as native
+
+          package_path = Path(pyhuge.__file__).resolve()
+          workspace = Path(os.environ["GITHUB_WORKSPACE"]).resolve()
+          assert not package_path.is_relative_to(workspace)
+          assert pyhuge.test(require_runtime=True)["native_extension"]
+          assert native.omp_max_threads() >= 1
+          assert pyhuge.huge_stockdata().data.shape == (1258, 452)
+
+          data = np.random.default_rng(1).normal(size=(30, 4))
+          mb_fit = pyhuge.huge_mb(data, nlambda=2, verbose=False)
+          tiger_fit = pyhuge.huge_tiger(
+              data, lambda_=[0.5], verbose=False
+          )
+          assert len(mb_fit.path) == 2
+          assert len(tiger_fit.path) == 1
+          PY
+      - name: Upload source distribution
         uses: actions/upload-artifact@v4
         with:
-          name: pyhuge-dist
-          path: python-package/dist/*
+          name: pyhuge-sdist
+          path: python-package/dist/*.tar.gz
+
+  wheels:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install pinned wheel builder
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "cibuildwheel==4.1.0" twine
+      - name: Build, repair, and test manylinux wheels
+        working-directory: python-package
+        run: python -m cibuildwheel --output-dir wheelhouse .
+      - name: Validate wheel metadata
+        working-directory: python-package
+        run: python -m twine check wheelhouse/*.whl
+      - name: Verify wheel contents
+        working-directory: python-package
+        run: |
+          python - <<'PY'
+          import re
+          import zipfile
+          from pathlib import Path
+
+          wheelhouse = Path("wheelhouse")
+          wheels = sorted(wheelhouse.glob("*.whl"))
+          expected = {"cp39", "cp310", "cp311", "cp312", "cp313", "cp314"}
+          assert len(wheels) == len(expected), wheels
+
+          found = set()
+          for wheel in wheels:
+              name = wheel.name
+              assert not name.endswith("-linux_x86_64.whl"), name
+              assert "manylinux_2_28_x86_64" in name, name
+              match = re.search(
+                  r"-(cp(?:39|310|311|312|313|314))-(cp\d+)-", name
+              )
+              assert match is not None, name
+              assert match.group(1) == match.group(2), name
+              found.add(match.group(1))
+              with zipfile.ZipFile(wheel) as archive:
+                  names = archive.namelist()
+              assert any(
+                  item.startswith("pyhuge/_native_core") and item.endswith(".so")
+                  for item in names
+              ), name
+              assert "pyhuge/data/stockdata.npz" in names, name
+              assert any(
+                  item.endswith(".dist-info/licenses/LICENSE") for item in names
+              ), name
+              assert any(
+                  item.startswith("pyhuge.libs/libopenblas") and ".so" in item
+                  for item in names
+              ), f"{name} does not contain a repaired OpenBLAS library"
+
+          assert found == expected, found
+          PY
+      - name: Upload manylinux wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: pyhuge-wheels
+          path: python-package/wheelhouse/*.whl
+
+  wheel-smoke:
+    needs: wheels
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download manylinux wheels
+        uses: actions/download-artifact@v4
+        with:
+          name: pyhuge-wheels
+          path: dist
+      - name: Smoke-test CPython 3.11 wheel without system OpenBLAS
+        run: |
+          docker run --rm --platform linux/amd64 \
+            --volume "${GITHUB_WORKSPACE}/dist:/dist:ro" \
+            --workdir /tmp \
+            python:3.11-slim-bookworm \
+            sh -c 'set -eu
+              if find /usr/local/lib /usr/lib /lib -name "libopenblas*.so*" -print -quit 2>/dev/null | grep -q .; then
+                echo "clean runtime unexpectedly contains system OpenBLAS" >&2
+                exit 1
+              fi
+              wheel="$(find /dist -maxdepth 1 -name "pyhuge-*-cp311-cp311-manylinux*.whl")"
+              test -n "${wheel}"
+              test "$(printf "%s\n" ${wheel} | wc -l)" -eq 1
+              python -m pip install --only-binary=:all: --no-cache-dir "${wheel}"
+              extension="$(python -c "import pyhuge._native_core as native; print(native.__file__)")"
+              dependencies="$(ldd "${extension}")"
+              printf "%s\n" "${dependencies}"
+              if printf "%s\n" "${dependencies}" | grep -q "not found"; then
+                exit 1
+              fi
+              openblas="$(printf "%s\n" "${dependencies}" | grep -i openblas | xargs | cut -d " " -f 3)"
+              test -n "${openblas}"
+              case "$(readlink -f "${openblas}")" in
+                */site-packages/pyhuge.libs/*) ;;
+                *)
+                  echo "OpenBLAS did not resolve to the repaired wheel library" >&2
+                  exit 1
+                  ;;
+              esac
+              python -c "import numpy as np, pyhuge, pyhuge._native_core; pyhuge.test(require_runtime=True); stock = pyhuge.huge_stockdata(); fit = pyhuge.huge(np.random.default_rng(1).normal(size=(30, 4)), method=\"mb\", nlambda=2, verbose=False); assert stock.data.shape == (1258, 452); assert len(fit.path) == 2"
+            '
 
   publish:
     runs-on: ubuntu-latest
-    needs: build
+    needs: [sdist, wheel-smoke]
+    if: startsWith(github.ref, 'refs/tags/pyhuge-v')
     permissions:
       id-token: write
     environment:
       name: pypi
       url: https://pypi.org/p/pyhuge
     steps:
-      - name: Download dist artifacts
+      - name: Download source distribution
         uses: actions/download-artifact@v4
         with:
-          name: pyhuge-dist
+          name: pyhuge-sdist
+          path: dist
+      - name: Download manylinux wheels
+        uses: actions/download-artifact@v4
+        with:
+          name: pyhuge-wheels
           path: dist
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1

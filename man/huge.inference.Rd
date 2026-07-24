@@ -7,17 +7,17 @@
 huge.inference(data, T, adj, alpha = 0.05, type = "Gaussian", method = "score")
 }
 \arguments{
-\item{data}{The input \code{n} by \code{d} data matrix(\code{n} is the sample size and \code{d} is the dimension).}
+\item{data}{A finite numeric \code{n} by \code{d} data matrix with at least two observations and no constant columns.}
 
-\item{T}{The estimated inverse of correlation matrix of the data.}
+\item{T}{A finite \code{d} by \code{d} estimate of the inverse correlation matrix with a positive diagonal.}
 
-\item{adj}{The adjacency matrix corresponding to the graph.}
+\item{adj}{A finite numeric or logical \code{d} by \code{d} adjacency matrix corresponding to the graph.}
 
-\item{alpha}{The significance level of hypothesis.The default value is \code{0.05}.}
+\item{alpha}{The significance level in \code{(0, 1]}. The default value is \code{0.05}.}
 
 \item{type}{The type of input data. There are 2 options: \code{"Gaussian"} and \code{"Nonparanormal"}. The default value is \code{"Gaussian"}.}
 
-\item{method}{When using nonparanormal graphical model. Test method with 2 options: \code{"score"} and \code{"wald"}. The default value is \code{"score"}.}
+\item{method}{For a Nonparanormal model, the test method: \code{"score"} or \code{"wald"}. The default is \code{"score"}. Ignored for Gaussian inference.}
 }
 \value{
 An object is returned:
@@ -36,7 +36,7 @@ Implements the inference for high dimensional graphical models, including Gaussi
 We consider the problems of testing the presence of a single edge and the hypothesis is that the edge is absent.
 }
 \details{
-For Nonparanormal graphical model we provide Score test method and Wald Test. However it is really slow for inferencing on Nonparanormal model, especially for large data.
+For Nonparanormal graphical model we provide Score test method and Wald Test. However it is really slow for inferencing on Nonparanormal model, especially for large data. Gaussian inference supports one variable, while Nonparanormal inference requires at least two. Nonparanormal score-test diagonal p-values do not represent edges and may be undefined; every tested off-diagonal p-value must be finite.
 }
 \examples{
 #generate data

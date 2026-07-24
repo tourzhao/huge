@@ -44,6 +44,7 @@ require an R runtime.
 - Python `>=3.9`
 - Runtime packages: `numpy`, `scipy`
 - Native extension: `pyhuge._native_core` is required for `mb`, `tiger`, `glasso`
+- Native source builds: Linux or macOS; Windows is not currently supported
 
 Optional:
 
@@ -51,6 +52,15 @@ Optional:
 - docs: `mkdocs`, `mkdocs-material`
 
 ## Installation
+
+Published Linux x86_64 wheels bundle OpenBLAS and the OpenMP runtime:
+
+```bash
+pip install "pyhuge[runtime]"
+```
+
+Linux source builds require a C++17 compiler and OpenBLAS development files
+(`libopenblas-dev` on Ubuntu/Debian or `openblas-devel` on Fedora/RHEL).
 
 From source:
 
@@ -90,6 +100,11 @@ sel = huge_select(fit, criterion="ric", verbose=False)
 print(fit.method, len(fit.path), sel.opt_lambda, sel.opt_sparsity)
 ```
 
+`input_type="auto"` preserves covariance detection by symmetry. For an
+observation matrix that is itself square and symmetric, set
+`input_type="data"` explicitly; use `"covariance"` to require covariance or
+correlation input.
+
 Network visualization:
 
 ```python
@@ -119,8 +134,8 @@ mkdocs build --strict
 cd python-package
 pytest
 bash scripts/build_dist.sh
-python scripts/bump_version.py 0.8.1
-bash scripts/release.sh 0.8.1
+python scripts/bump_version.py 2.0.0
+bash scripts/release.sh 2.0.0
 ```
 
 ## Citation

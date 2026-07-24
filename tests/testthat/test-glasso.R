@@ -29,6 +29,30 @@ test_that("glasso loglik values are finite", {
   expect_true(all(is.finite(fit$loglik)))
 })
 
+test_that("glasso loglik matches the returned precision matrices", {
+  cases <- list(
+    list(S = diag(c(2, 3)), lambda = 0.5),
+    list(
+      S = matrix(c(2, 0.6, 0,
+                   0.6, 3, 0,
+                   0, 0, 4), 3, 3),
+      lambda = c(0.4, 0.2)
+    )
+  )
+
+  for (case in cases) {
+    fit <- huge(case$S, method = "glasso", lambda = case$lambda,
+                verbose = FALSE)
+    for (k in seq_along(fit$icov)) {
+      precision <- fit$icov[[k]]
+      direct <- as.numeric(determinant(precision, logarithm = TRUE)$modulus) -
+        sum(case$S * precision)
+      expect_equal(fit$loglik[k], direct, tolerance = 1e-10,
+                   info = paste("lambda index", k))
+    }
+  }
+})
+
 test_that("glasso path matrices are symmetric", {
   set.seed(13)
   L <- huge.generator(n = 80, d = 30, graph = "cluster", verbose = FALSE)
@@ -50,6 +74,51 @@ test_that("glasso icov matrices are symmetric", {
     ic <- fit$icov[[k]]
     expect_equal(ic, t(ic), tolerance = 1e-4,
                  info = paste("icov asymmetric at k =", k))
+  }
+})
+
+test_that("glasso precision symmetrization avoids finite overflow", {
+  S <- 1e-307 * matrix(c(1, .99, .99, 1), nrow = 2)
+  fit <- huge.glasso(
+    S, lambda = 1e-309, cov.output = TRUE, verbose = FALSE
+  )
+
+  precision <- fit$icov[[1]]
+  expect_true(all(is.finite(precision)))
+  expect_identical(precision, t(precision))
+  expect_true(all(is.finite(fit$cov[[1]])))
+  expect_true(all(is.finite(fit$loglik)))
+  direct <- as.numeric(determinant(precision, logarithm = TRUE)$modulus) -
+    sum(S * precision)
+  expect_equal(fit$loglik[1], direct, tolerance = 1e-10)
+})
+
+test_that("glasso log-likelihood has no absolute pivot scale", {
+  S <- 1e20 * matrix(c(1, .5, .5, 1), nrow = 2)
+  fit <- huge.glasso(
+    S, lambda = 1e19, cov.output = TRUE, verbose = FALSE
+  )
+
+  precision <- fit$icov[[1]]
+  expect_true(all(is.finite(precision)))
+  expect_true(all(is.finite(fit$cov[[1]])))
+  direct <- as.numeric(determinant(precision, logarithm = TRUE)$modulus) -
+    sum(S * precision)
+  expect_true(is.finite(direct))
+  expect_equal(fit$loglik[1], direct, tolerance = 1e-10)
+})
+
+test_that("glasso rejects non-finite native results", {
+  for (scale in c(1e-320, 1e308)) {
+    for (cov.output in c(FALSE, TRUE)) {
+      expect_error(
+        huge.glasso(
+          diag(scale, 2), lambda = scale,
+          cov.output = cov.output, verbose = FALSE
+        ),
+        "non-finite"
+      )
+    }
   }
 })
 
@@ -85,6 +154,85 @@ test_that("glasso accepts covariance matrix input", {
   expect_s3_class(fit, "huge")
   expect_true(fit$cov.input)
   expect_true(all(diff(fit$sparsity) >= -1e-10))
+})
+
+test_that("glasso default lambda ignores covariance diagonal scale", {
+  expected.identity <- c(1e-3, sqrt(1e-7), 1e-4)
+  diagonal <- diag(c(100, 3, .5, 8))
+  diagonal.fit <- huge.glasso(
+    diagonal, nlambda = 3, lambda.min.ratio = .1, verbose = FALSE
+  )
+
+  expect_equal(diagonal.fit$lambda, expected.identity, tolerance = 1e-15)
+  expect_true(all(vapply(
+    diagonal.fit$path, function(path) sum(path) == 0, logical(1)
+  )))
+  expect_true(all(vapply(
+    diagonal.fit$icov, function(icov) all(is.finite(icov)), logical(1)
+  )))
+
+  S <- matrix(
+    c(100, .6, 0,
+      .6, 3, -.2,
+      0, -.2, .5),
+    nrow = 3
+  )
+  covariance.fit <- huge.glasso(
+    S, nlambda = 3, lambda.min.ratio = .25, verbose = FALSE
+  )
+  expect_equal(covariance.fit$lambda, c(.6, .3, .15),
+               tolerance = 1e-15)
+
+  weak <- diag(3)
+  weak[1, 2] <- weak[2, 1] <- 1e-6
+  weak.fit <- huge.glasso(
+    weak, nlambda = 2, lambda.min.ratio = .1, verbose = FALSE
+  )
+  expect_equal(weak.fit$lambda, c(1e-6, 1e-7), tolerance = 1e-20)
+
+  explicit <- c(.55, .2)
+  expect_identical(
+    huge.glasso(S, lambda = explicit, verbose = FALSE)$lambda,
+    explicit
+  )
+})
+
+test_that("glasso raw-data default lambda remains correlation based", {
+  set.seed(171)
+  x <- matrix(rnorm(70 * 8), nrow = 70)
+  correlation <- cor(x)
+  lambda.max <- max(abs(correlation[upper.tri(correlation)]))
+  expected <- exp(seq(
+    log(lambda.max), log(.2 * lambda.max), length.out = 4
+  ))
+
+  fit <- huge.glasso(
+    x, nlambda = 4, lambda.min.ratio = .2, verbose = FALSE
+  )
+  expect_equal(fit$lambda, expected, tolerance = 1e-12)
+})
+
+test_that("glasso rejects uncertified covariance and precision pairs", {
+  rho <- 0.9999
+  covariance <- matrix(rho, 3, 3)
+  diag(covariance) <- 1
+
+  for (cov.output in c(FALSE, TRUE)) {
+    expect_error(
+      huge.glasso(
+        covariance, lambda = c(0.1, 0.0002),
+        cov.output = cov.output, verbose = FALSE
+      ),
+      "not positive definite"
+    )
+    expect_error(
+      huge.glasso(
+        covariance, lambda = 0.01,
+        cov.output = cov.output, verbose = FALSE
+      ),
+      "inconsistent precision and covariance"
+    )
+  }
 })
 
 test_that("glasso works across graph types", {

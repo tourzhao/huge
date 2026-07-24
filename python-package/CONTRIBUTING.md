@@ -1,4 +1,4 @@
-# Contributing (pyhuge 0.3)
+# Contributing to pyhuge
 
 ## Local setup
 
@@ -34,8 +34,8 @@ bash scripts/build_dist.sh
 ## Bump version and prepare release
 
 ```bash
-python scripts/bump_version.py 0.3.1
-bash scripts/release.sh 0.3.1
+python scripts/bump_version.py 2.0.0
+bash scripts/release.sh 2.0.0
 ```
 
 ## Code principles

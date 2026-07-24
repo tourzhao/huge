@@ -11,8 +11,14 @@
 #' The graph structure is estimated by Meinshausen-Buhlmann graph estimation or the graphical lasso, and both methods can be further accelerated via the lossy screening rule by preselecting the neighborhood of each variable by correlation thresholding. We target on high-dimensional data analysis usually d >> n, and the computation is memory-optimized using the sparse matrix output. We also provide a highly computationally efficient approaches correlation thresholding graph estimation.
 #'
 #' @param x There are 2 options: (1) \code{x} is an \code{n} by \code{d} data matrix (2) a \code{d} by \code{d} sample covariance matrix. The program automatically identifies the input matrix by checking the symmetry. (\code{n} is the sample size and \code{d} is the dimension).
-#' @param lambda A sequence of decreasing positive numbers to control the regularization when \code{method = "mb"}, \code{"glasso"} or \code{"tiger"}, or the thresholding in \code{method = "ct"}. Typical usage is to leave the input \code{lambda = NULL} and have the program compute its own \code{lambda} sequence based on \code{nlambda} and \code{lambda.min.ratio}. Users can also specify a sequence to override this. When \code{method = "mb"}, \code{"glasso"} or \code{"tiger"}, use with care - it is better to supply a decreasing sequence values than a single (small) value.
-#' @param nlambda The number of regularization/thresholding parameters. The default value is \code{30} for \code{method = "ct"} and \code{10} for \code{method = "mb"}, \code{"glasso"} or \code{"tiger"}.
+#' @param lambda An optional numeric scalar or non-empty one-dimensional
+#'   numeric path. For \code{method = "mb"}, \code{"glasso"}, or
+#'   \code{"tiger"}, values must be finite, strictly
+#'   positive, and non-increasing; ties are allowed. For \code{method = "ct"},
+#'   values must be finite and non-negative, zero is allowed, and thresholds
+#'   are applied in the supplied order. Leave \code{lambda = NULL} to generate
+#'   a path from \code{nlambda} and \code{lambda.min.ratio}.
+#' @param nlambda The number of regularization/thresholding parameters. The default value is \code{20} for \code{method = "ct"} and \code{10} for \code{method = "mb"}, \code{"glasso"} or \code{"tiger"}.
 #' @param lambda.min.ratio If \code{method = "mb"}, \code{"glasso"} or \code{"tiger"}, it is the smallest value for \code{lambda}, as a fraction of the upperbound (\code{MAX}) of the regularization/thresholding parameter which makes all estimates equal to \code{0}. The program can automatically generate \code{lambda} as a sequence of length = \code{nlambda} starting from \code{MAX} to \code{lambda.min.ratio*MAX} in log scale. If \code{method = "ct"}, it is the largest sparsity level for estimated graphs. The program can automatically generate \code{lambda} as a sequence of length = \code{nlambda}, which makes the sparsity level of the graph path increases from \code{0} to \code{lambda.min.ratio} evenly.The default value is \code{0.1} when \code{method = "mb"}, \code{"glasso"} or \code{"tiger"}, and 0.05 when \code{method = "ct"}.
 #' @param method Graph estimation methods with 4 options: \code{"mb"}, \code{"ct"}, \code{"glasso"} and \code{"tiger"}. The default value is \code{"mb"}.
 #' @param scr If \code{scr = TRUE}, the lossy screening rule is applied to preselect the neighborhood before the graph estimation. The default value is  \code{FALSE}. NOT applicable when \code{method = "ct"} or \code{"tiger"}.
@@ -20,6 +26,10 @@
 #' @param cov.output If \code{cov.output = TRUE}, the output will include a path of estimated covariance matrices. ONLY applicable when \code{method = "glasso"}. Since the estimated covariance matrices are generally not sparse, please use it with care, or it may take much memory under high-dimensional setting. The default value is \code{FALSE}.
 #' @param sym Symmetrize the output graphs. If \code{sym = "and"}, the edge between node \code{i} and node \code{j} is selected ONLY when both node \code{i} and node \code{j} are selected as neighbors for each other. If \code{sym = "or"}, the edge is selected when either node \code{i} or node \code{j} is selected as the neighbor for each other. The default value is \code{"or"}. ONLY applicable when \code{method = "mb"} or \code{"tiger"}.
 #' @param verbose If \code{verbose = FALSE}, tracing information printing is disabled. The default value is \code{TRUE}.
+#' @param input.type How to interpret \code{x}: \code{"auto"} preserves
+#'   symmetry-based detection, \code{"data"} forces an observation matrix,
+#'   and \code{"covariance"} requires a square covariance or correlation
+#'   matrix. Use \code{"data"} for square symmetric observation matrices.
 #' @return
 #' An object with S3 class \code{"huge"} is returned:
 #' \item{data}{
@@ -29,7 +39,7 @@
 #'   An indicator of the sample covariance.
 #' }
 #' \item{ind.mat}{
-#'   The \code{scr.num} by \code{k} matrix with each column corresponding to a variable in \code{ind.group} and contains the indices of the remaining neighbors after the screening. ONLY applicable when \code{scr = TRUE}.
+#'   The \code{scr.num} by \code{d} matrix with each column containing the indices of the remaining neighbors of the corresponding variable after the lossy screening. ONLY applicable when \code{scr = TRUE}.
 #' }
 #' \item{lambda}{
 #'   The sequence of regularization parameters used in mb or thresholding parameters in ct.
@@ -41,7 +51,7 @@
 #'   The \code{scr} from the input. ONLY applicable when \code{method = "mb"} or \code{"glasso"}.
 #' }
 #' \item{path}{
-#'   A list of \code{k} by \code{k} adjacency matrices of estimated graphs as a graph path corresponding to \code{lambda}.
+#'   A list of \code{d} by \code{d} adjacency matrices of estimated graphs as a graph path corresponding to \code{lambda}.
 #' }
 #' \item{sparsity}{
 #'   The sparsity levels of the graph path.
@@ -56,7 +66,7 @@
 #'   The method used in the graph estimation stage.
 #' }
 #' \item{df}{
-#'   If \code{method = "mb"} or \code{"tiger"}, it is a \code{k} by \code{nlambda} matrix. Each row contains the number of nonzero coefficients along the lasso solution path. If \code{method = "glasso"}, it is a \code{nlambda} dimensional vector containing the number of nonzero coefficients along the graph path \code{icov}.
+#'   If \code{method = "mb"} or \code{"tiger"}, it is a \code{d} by \code{nlambda} matrix. Each row contains the number of nonzero coefficients along the lasso solution path. If \code{method = "glasso"}, it is a \code{nlambda} dimensional vector containing the number of nonzero coefficients along the graph path \code{icov}.
 #' }
 #' \item{loglik}{
 #'   A \code{nlambda} dimensional vector containing the likelihood scores along the graph path (\code{icov}). ONLY applicable when \code{method = "glasso"}. For an estimated inverse covariance Z, the program only calculates log(det(Z)) - trace(SZ) where S is the empirical covariance matrix. For the likelihood for n observations, please multiply by n/2.
@@ -74,62 +84,26 @@
 #' plot(out1, align = TRUE) #Aligned
 #' huge.plot(out1$path[[3]])
 #' @export
-huge = function(x, lambda = NULL, nlambda = NULL, lambda.min.ratio = NULL, method = "mb", scr = NULL, scr.num = NULL, cov.output = FALSE, sym = "or", verbose = TRUE)
+huge = function(x, lambda = NULL, nlambda = NULL, lambda.min.ratio = NULL, method = "mb", scr = NULL, scr.num = NULL, cov.output = FALSE, sym = "or", verbose = TRUE, input.type = "auto")
 {
 
-	est = list()
-	est$method = method
-
+	# Each method function returns a list carrying all of its output fields;
+	# adopt it wholesale rather than copying fields one by one (a historical
+	# source of missed-field bugs), then attach the shared metadata.
 	if(method == "ct")
-	{
-		fit = huge.ct(x, nlambda = nlambda, lambda.min.ratio = lambda.min.ratio, lambda = lambda, verbose = verbose)
-		est$path = fit$path
-		est$lambda = fit$lambda
-		est$sparsity = fit$sparsity
-		est$cov.input = fit$cov.input
+		est = huge.ct(x, nlambda = nlambda, lambda.min.ratio = lambda.min.ratio, lambda = lambda, verbose = verbose, input.type = input.type)
+	else if(method == "mb")
+		est = huge.mb(x, lambda = lambda, nlambda = nlambda, lambda.min.ratio = lambda.min.ratio, scr = scr, scr.num = scr.num, sym = sym, verbose = verbose, input.type = input.type)
+	else if(method == "glasso")
+		est = huge.glasso(x, nlambda = nlambda, lambda.min.ratio = lambda.min.ratio, lambda = lambda, scr = scr, cov.output = cov.output, verbose = verbose, input.type = input.type)
+	else if(method == "tiger")
+		est = huge.tiger(x, lambda = lambda, nlambda = nlambda, lambda.min.ratio = lambda.min.ratio, sym = sym, verbose = verbose, input.type = input.type)
+	else
+		stop("method must be one of \"mb\", \"glasso\", \"ct\", \"tiger\".")
 
-	} else if(method == "mb")
-	{
-		fit = huge.mb(x, lambda = lambda, nlambda = nlambda, lambda.min.ratio = lambda.min.ratio, scr = scr, scr.num = scr.num, sym = sym, verbose = verbose)
-		est$path = fit$path
-		est$beta = fit$beta
-		est$lambda = fit$lambda
-		est$sparsity = fit$sparsity
-		est$df = fit$df
-		est$idx_mat = fit$idx_mat
-		est$sym = sym
-		est$scr = fit$scr
-		est$cov.input = fit$cov.input
+	if(method %in% c("mb", "tiger")) est$sym = sym
 
-	} else if(method == "glasso")
-	{
-		fit = huge.glasso(x, nlambda = nlambda, lambda.min.ratio = lambda.min.ratio, lambda = lambda, scr = scr, cov.output = cov.output, verbose = verbose)
-		est$path = fit$path
-		est$lambda = fit$lambda
-		est$icov = fit$icov
-		est$df = fit$df
-		est$sparsity = fit$sparsity
-		est$loglik = fit$loglik
-		if(cov.output)
-			est$cov = fit$cov
-		est$cov.input = fit$cov.input
-		est$cov.output = fit$cov.output
-		est$scr = fit$scr
-
-	} else if(method == "tiger")
-	{
-	  fit = huge.tiger(x, lambda = lambda, nlambda = nlambda, lambda.min.ratio = lambda.min.ratio, sym = sym, verbose = verbose)
-	  est$path = fit$path
-	  est$lambda = fit$lambda
-	  est$sparsity = fit$sparsity
-	  est$df = fit$df
-	  est$idx_mat = fit$idx_mat
-	  est$sym = sym
-	  est$scr = fit$scr
-	  est$cov.input = fit$cov.input
-	  est$icov = fit$icov;
-	}
-
+	est$method = method
 	est$data = x
 
 	class(est) = "huge"
@@ -175,6 +149,8 @@ print.huge = function(x, ...)
 #' @seealso \code{\link{huge}}
 #' @export
 plot.huge = function(x, align = FALSE, ...){
+	old.par = .huge_graphics_state()
+	on.exit(.huge_restore_graphics_state(old.par), add = TRUE)
 	if(length(x$lambda) == 1)	par(mfrow = c(1, 2), pty = "s", omi=c(0.3,0.3,0.3,0.3), mai = c(0.3,0.3,0.3,0.3))
 	if(length(x$lambda) == 2)	par(mfrow = c(1, 3), pty = "s", omi=c(0.3,0.3,0.3,0.3), mai = c(0.3,0.3,0.3,0.3))
 	if(length(x$lambda) >= 3)	par(mfrow = c(1, 4), pty = "s", omi=c(0.3,0.3,0.3,0.3), mai = c(0.3,0.3,0.3,0.3))

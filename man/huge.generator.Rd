@@ -17,23 +17,23 @@ huge.generator(
 )
 }
 \arguments{
-\item{n}{The number of observations (sample size). The default value is \code{200}.}
+\item{n}{The number of observations (sample size), as an integer of at least \code{2}. The default value is \code{200}.}
 
-\item{d}{The number of variables (dimension). The default value is \code{50}.}
+\item{d}{The positive integer number of variables (dimension). The default value is \code{50}.}
 
-\item{graph}{The graph structure with 4 options: \code{"random"}, \code{"hub"}, \code{"cluster"}, \code{"band"} and \code{"scale-free"}.}
+\item{graph}{The graph structure with 5 options: \code{"random"}, \code{"hub"}, \code{"cluster"}, \code{"band"} and \code{"scale-free"}.}
 
-\item{v}{The off-diagonal elements of the precision matrix, controlling the magnitude of partial correlations with \code{u}. The default value is \code{0.3}.}
+\item{v}{A finite positive number used for the off-diagonal elements of the precision matrix, controlling the magnitude of partial correlations with \code{u}. The default value is \code{0.3}.}
 
-\item{u}{A positive number being added to the diagonal elements of the precision matrix, to control the magnitude of partial correlations. The default value is \code{0.1}.}
+\item{u}{A finite positive number added to the diagonal elements of the precision matrix to control the magnitude of partial correlations. The default value is \code{0.1}.}
 
-\item{g}{For \code{"cluster"} or \code{"hub"} graph, \code{g} is the number of hubs or clusters in the graph. The default value is about \code{d/20} if \code{d >= 40} and \code{2} if \code{d < 40}. For \code{"band"} graph, \code{g} is the bandwidth and the default value is \code{1}. NOT applicable to \code{"random"} graph.}
+\item{g}{A finite positive integer. For \code{"cluster"} or \code{"hub"} graph, \code{g} is the number of clusters or hubs; values above \code{d} are treated as \code{d}. The default is about \code{d/20} if \code{d >= 40} and \code{min(2, d)} otherwise. For \code{"band"} graph, \code{g} is the bandwidth and defaults to \code{1}; values above \code{d - 1} add no edges. Not applicable to \code{"random"} or \code{"scale-free"} graph.}
 
-\item{prob}{For \code{"random"} graph, it is the probability that a pair of nodes has an edge. The default value is \code{3/d}. For \code{"cluster"} graph, it is the probability that a pair of nodes has an edge in each cluster. The default value is \code{6*g/d} if \code{d/g <= 30} and \code{0.3} if \code{d/g > 30}. NOT applicable to \code{"hub"} or \code{"band"} graphs.}
+\item{prob}{For \code{"random"} or \code{"cluster"} graph, a finite number in \code{[0, 1]} giving the probability that a pair of nodes has an edge. The default is \code{min(1, 3/d)} for \code{"random"}. For \code{"cluster"}, the default is \code{min(1, 6*g/d)} if \code{d/g <= 30} and \code{0.3} otherwise. Not applicable to \code{"hub"}, \code{"band"}, or \code{"scale-free"} graph.}
 
-\item{vis}{Visualize the adjacency matrix of the true graph structure, the graph pattern, the covariance matrix and the empirical covariance matrix. The default value is \code{FALSE}}
+\item{vis}{A single non-missing logical. If \code{TRUE}, visualize the adjacency matrix, graph pattern, covariance matrix, and empirical correlation matrix. The default is \code{FALSE}.}
 
-\item{verbose}{If \code{verbose = FALSE}, tracing information printing is disabled. The default value is \code{TRUE}.}
+\item{verbose}{A single non-missing logical. If \code{FALSE}, tracing output is disabled. The default is \code{TRUE}.}
 }
 \value{
 An object with S3 class "sim" is returned:
@@ -47,10 +47,13 @@ An object with S3 class "sim" is returned:
   The precision matrix for the generated data
 }
 \item{sigmahat}{
-  The empirical covariance matrix for the generated data
+  The empirical correlation matrix for the generated data
 }
 \item{theta}{
   The adjacency matrix of true graph structure (in sparse matrix representation) for the generated data
+}
+\item{sparsity}{
+  The proportion of possible off-diagonal entries present in the graph; zero when \code{d=1}
 }
 }
 \description{
@@ -58,13 +61,13 @@ Implements the data generation from multivariate normal distributions with diffe
 }
 \details{
 Given the adjacency matrix \code{theta}, the graph patterns are generated as below:\cr\cr
-(I) \code{"random"}: Each pair of off-diagonal elements are randomly set \code{theta[i,j]=theta[j,i]=1} for \code{i!=j} with probability \code{prob}, and \code{0} other wise. It results in about \code{d*(d-1)*prob/2} edges in the graph.\cr\cr
+(I) \code{"random"}: Each pair of off-diagonal elements are randomly set \code{theta[i,j]=theta[j,i]=1} for \code{i!=j} with probability \code{prob}, and \code{0} otherwise. It results in about \code{d*(d-1)*prob/2} edges in the graph.\cr\cr
 (II)\code{"hub"}:The row/columns are evenly partitioned into \code{g} disjoint groups. Each group is associated with a "center" row \code{i} in that group. Each pair of off-diagonal elements are set \code{theta[i,j]=theta[j,i]=1} for \code{i!=j} if \code{j} also belongs to the same group as \code{i} and \code{0} otherwise. It results in \code{d - g} edges in the graph.\cr\cr
-(III)\code{"cluster"}:The row/columns are evenly partitioned into \code{g} disjoint groups. Each pair of off-diagonal elements are set \code{theta[i,j]=theta[j,i]=1} for \code{i!=j} with the probability \code{prob}if both \code{i} and \code{j} belong to the same group, and \code{0} other wise. It results in about \code{g*(d/g)*(d/g-1)*prob/2} edges in the graph.\cr\cr
-(IV)\code{"band"}: The off-diagonal elements are set to be \code{theta[i,j]=1} if \code{1<=|i-j|<=g} and \code{0} other wise. It results in \code{(2d-1-g)*g/2} edges in the graph.\cr\cr
-(V) \code{"scale-free"}: The graph is generated using B-A algorithm. The initial graph has two connected nodes and each new node is connected to only one node in the existing graph with the probability proportional to the degree of the each node in the existing graph. It results in \code{d} edges in the graph.
+(III)\code{"cluster"}:The row/columns are evenly partitioned into \code{g} disjoint groups. Each pair of off-diagonal elements are set \code{theta[i,j]=theta[j,i]=1} for \code{i!=j} with the probability \code{prob}if both \code{i} and \code{j} belong to the same group, and \code{0} otherwise. It results in about \code{g*(d/g)*(d/g-1)*prob/2} edges in the graph.\cr\cr
+(IV)\code{"band"}: Let \code{b=min(g,d-1)}. The off-diagonal elements are set to be \code{theta[i,j]=1} if \code{1<=|i-j|<=b} and \code{0} otherwise. It results in \code{(2d-1-b)*b/2} edges in the graph.\cr\cr
+(V) \code{"scale-free"}: The graph is generated using B-A algorithm. The initial graph has two connected nodes and each new node is connected to only one node in the existing graph with the probability proportional to the degree of the each node in the existing graph. It results in \code{d-1} edges for \code{d>=2}; for \code{d=1}, the graph is empty.
 
-The adjacency matrix \code{theta} has all diagonal elements equal to \code{0}. To obtain a positive definite precision matrix, the smallest eigenvalue of \code{theta*v} (denoted by \code{e}) is computed. Then we set the precision matrix equal to \code{theta*v+(|e|+0.1+u)I}. The covariance matrix is then computed to generate multivariate normal data.
+The adjacency matrix \code{theta} has all diagonal elements equal to \code{0}. To obtain a positive definite precision matrix, the smallest eigenvalue of \code{theta*v} (denoted by \code{e}) is computed. Then we set the precision matrix equal to \code{theta*v+(|e|+0.1+u)I}. The covariance matrix is then computed to generate multivariate normal data. Every graph type returns an empty graph with zero sparsity when \code{d=1}.
 }
 \examples{
 ## band graph with bandwidth 3

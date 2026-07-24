@@ -13,7 +13,8 @@ Native ROC computation across graph path estimates.
 ## Key arguments
 
 - `path`: sequence of adjacency matrices
-- `theta`: ground-truth adjacency matrix
+- `theta`: ground-truth adjacency matrix containing at least one edge and one
+  absent off-diagonal edge
 - `plot`: if `True`, draw ROC curve via matplotlib helper
 
 ## Returns
@@ -24,3 +25,6 @@ Native ROC computation across graph path estimates.
 - `tp`: true-positive-rate array
 - `fp`: false-positive-rate array
 - `auc`: area under ROC curve
+
+ROC/AUC is undefined for a one-class truth matrix, which is rejected with a
+clear error.

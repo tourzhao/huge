@@ -1,14 +1,15 @@
 [build-system]
-requires = ["setuptools>=68", "wheel", "pybind11>=2.11", "numpy>=1.23"]
+requires = ["setuptools>=77", "wheel", "pybind11>=2.11", "numpy>=1.23"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyhuge"
-version = "0.8.1"
+version = "2.0.0"
 description = "Native Python package for high-dimensional undirected graph estimation"
 readme = "README.md"
 requires-python = ">=3.9"
 license = "GPL-2.0-only"
+license-files = ["LICENSE"]
 authors = [
   { name = "Tuo Zhao", email = "tourzhao@gatech.edu" }
 ]
@@ -16,6 +17,8 @@ keywords = ["graphical-model", "graphical-lasso", "sparse", "statistics", "nativ
 classifiers = [
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3 :: Only",
+  "Operating System :: MacOS :: MacOS X",
+  "Operating System :: POSIX :: Linux",
   "Intended Audience :: Science/Research",
   "Topic :: Scientific/Engineering :: Mathematics",
 ]
@@ -53,6 +56,7 @@ dev = [
 release = [
   "build>=1.2",
   "twine>=5.1",
+  "cibuildwheel==4.1.0",
 ]
 
 [project.scripts]
@@ -78,3 +82,18 @@ pyhuge = ["data/*.npz"]
 minversion = "7.0"
 testpaths = ["tests"]
 addopts = "-q"
+
+[tool.cibuildwheel]
+build = "cp39-manylinux_x86_64 cp310-manylinux_x86_64 cp311-manylinux_x86_64 cp312-manylinux_x86_64 cp313-manylinux_x86_64 cp314-manylinux_x86_64"
+archs = ["x86_64"]
+manylinux-x86_64-image = "manylinux_2_28"
+test-extras = ["test"]
+test-sources = [
+  "tests/test_native_smoke.py",
+  "tests/test_native_symbols.py",
+]
+test-command = "pytest -q tests/test_native_smoke.py tests/test_native_symbols.py"
+
+[tool.cibuildwheel.linux]
+before-all = "dnf install -y openblas-devel"
+repair-wheel-command = "auditwheel repair -w {dest_dir} {wheel}"

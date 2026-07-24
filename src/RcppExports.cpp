@@ -38,8 +38,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // SPMBscr
-List SPMBscr(NumericMatrix S, NumericVector lambda, int nlambda, int d, int maxdf, IntegerMatrix idx_scr, int nscr);
-RcppExport SEXP _huge_SPMBscr(SEXP SSEXP, SEXP lambdaSEXP, SEXP nlambdaSEXP, SEXP dSEXP, SEXP maxdfSEXP, SEXP idx_scrSEXP, SEXP nscrSEXP) {
+List SPMBscr(NumericMatrix S, NumericVector lambda, int nlambda, int d, IntegerMatrix idx_scr, int nscr);
+RcppExport SEXP _huge_SPMBscr(SEXP SSEXP, SEXP lambdaSEXP, SEXP nlambdaSEXP, SEXP dSEXP, SEXP idx_scrSEXP, SEXP nscrSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -47,16 +47,15 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< NumericVector >::type lambda(lambdaSEXP);
     Rcpp::traits::input_parameter< int >::type nlambda(nlambdaSEXP);
     Rcpp::traits::input_parameter< int >::type d(dSEXP);
-    Rcpp::traits::input_parameter< int >::type maxdf(maxdfSEXP);
     Rcpp::traits::input_parameter< IntegerMatrix >::type idx_scr(idx_scrSEXP);
     Rcpp::traits::input_parameter< int >::type nscr(nscrSEXP);
-    rcpp_result_gen = Rcpp::wrap(SPMBscr(S, lambda, nlambda, d, maxdf, idx_scr, nscr));
+    rcpp_result_gen = Rcpp::wrap(SPMBscr(S, lambda, nlambda, d, idx_scr, nscr));
     return rcpp_result_gen;
 END_RCPP
 }
 // SPMBgraph
-List SPMBgraph(NumericMatrix S, NumericVector lambda, int nlambda, int d, int maxdf);
-RcppExport SEXP _huge_SPMBgraph(SEXP SSEXP, SEXP lambdaSEXP, SEXP nlambdaSEXP, SEXP dSEXP, SEXP maxdfSEXP) {
+List SPMBgraph(NumericMatrix S, NumericVector lambda, int nlambda, int d);
+RcppExport SEXP _huge_SPMBgraph(SEXP SSEXP, SEXP lambdaSEXP, SEXP nlambdaSEXP, SEXP dSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -64,8 +63,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< NumericVector >::type lambda(lambdaSEXP);
     Rcpp::traits::input_parameter< int >::type nlambda(nlambdaSEXP);
     Rcpp::traits::input_parameter< int >::type d(dSEXP);
-    Rcpp::traits::input_parameter< int >::type maxdf(maxdfSEXP);
-    rcpp_result_gen = Rcpp::wrap(SPMBgraph(S, lambda, nlambda, d, maxdf));
+    rcpp_result_gen = Rcpp::wrap(SPMBgraph(S, lambda, nlambda, d));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -80,6 +78,22 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int >::type nlambda(nlambdaSEXP);
     Rcpp::traits::input_parameter< int >::type d(dSEXP);
     rcpp_result_gen = Rcpp::wrap(SPMBgraphsqrt(data, lambda, nlambda, d));
+    return rcpp_result_gen;
+END_RCPP
+}
+// SPMBgraphsqrtFit
+List SPMBgraphsqrtFit(NumericMatrix input, Nullable<NumericVector> lambda, int nlambda, int d, bool covariance_input, double lambda_min_ratio);
+RcppExport SEXP _huge_SPMBgraphsqrtFit(SEXP inputSEXP, SEXP lambdaSEXP, SEXP nlambdaSEXP, SEXP dSEXP, SEXP covariance_inputSEXP, SEXP lambda_min_ratioSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type input(inputSEXP);
+    Rcpp::traits::input_parameter< Nullable<NumericVector> >::type lambda(lambdaSEXP);
+    Rcpp::traits::input_parameter< int >::type nlambda(nlambdaSEXP);
+    Rcpp::traits::input_parameter< int >::type d(dSEXP);
+    Rcpp::traits::input_parameter< bool >::type covariance_input(covariance_inputSEXP);
+    Rcpp::traits::input_parameter< double >::type lambda_min_ratio(lambda_min_ratioSEXP);
+    rcpp_result_gen = Rcpp::wrap(SPMBgraphsqrtFit(input, lambda, nlambda, d, covariance_input, lambda_min_ratio));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -102,9 +116,10 @@ END_RCPP
 static const R_CallMethodDef CallEntries[] = {
     {"_huge_RIC", (DL_FUNC) &_huge_RIC, 5},
     {"_huge_SFGen", (DL_FUNC) &_huge_SFGen, 2},
-    {"_huge_SPMBscr", (DL_FUNC) &_huge_SPMBscr, 7},
-    {"_huge_SPMBgraph", (DL_FUNC) &_huge_SPMBgraph, 5},
+    {"_huge_SPMBscr", (DL_FUNC) &_huge_SPMBscr, 6},
+    {"_huge_SPMBgraph", (DL_FUNC) &_huge_SPMBgraph, 4},
     {"_huge_SPMBgraphsqrt", (DL_FUNC) &_huge_SPMBgraphsqrt, 4},
+    {"_huge_SPMBgraphsqrtFit", (DL_FUNC) &_huge_SPMBgraphsqrtFit, 6},
     {"_huge_hugeglasso", (DL_FUNC) &_huge_hugeglasso, 5},
     {NULL, NULL, 0}
 };

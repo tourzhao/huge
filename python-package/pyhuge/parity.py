@@ -149,6 +149,62 @@ def run_r_ct_default_reference(
         return {"lambda": lam, "sparsity": sparsity, "path": path}
 
 
+def run_r_tiger_reference(
+    x: np.ndarray,
+    lambda_tiger: np.ndarray,
+) -> dict[str, np.ndarray]:
+    """Run R huge TIGER on a fixed native lambda path."""
+
+    with tempfile.TemporaryDirectory(prefix="pyhuge_rref_tiger_") as td:
+        out_dir = Path(td)
+        x_path = out_dir / "x.csv"
+        lam_path = out_dir / "lam.txt"
+        np.savetxt(x_path, x, delimiter=",")
+        np.savetxt(lam_path, lambda_tiger)
+
+        _run_r_script(
+            """
+            args <- commandArgs(trailingOnly = TRUE)
+            x <- as.matrix(read.csv(args[1], header=FALSE))
+            lam <- as.numeric(scan(args[2], quiet=TRUE))
+            out_dir <- args[3]
+
+            suppressMessages(library(huge))
+            fit <- huge(x, method='tiger', lambda=lam, verbose=FALSE)
+            write.table(fit$lambda, file.path(out_dir, 'lambda.txt'),
+                        row.names=FALSE, col.names=FALSE)
+            write.table(fit$sparsity, file.path(out_dir, 'sparsity.txt'),
+                        row.names=FALSE, col.names=FALSE)
+
+            d <- ncol(x)
+            nlam <- length(fit$path)
+            path <- array(0, dim=c(nlam, d, d))
+            icov <- array(0, dim=c(nlam, d, d))
+            for (i in seq_len(nlam)) {
+              path[i,,] <- as.matrix(fit$path[[i]])
+              icov[i,,] <- fit$icov[[i]]
+            }
+            write.table(as.vector(path), file.path(out_dir, 'path_flat.txt'),
+                        row.names=FALSE, col.names=FALSE)
+            write.table(as.vector(icov), file.path(out_dir, 'icov_flat.txt'),
+                        row.names=FALSE, col.names=FALSE)
+            """,
+            [str(x_path), str(lam_path), str(out_dir)],
+        )
+
+        lam = np.atleast_1d(np.loadtxt(out_dir / "lambda.txt")).astype(float)
+        sparsity = np.atleast_1d(np.loadtxt(out_dir / "sparsity.txt")).astype(float)
+        d = int(x.shape[1])
+        nlam = int(lam.size)
+        path = np.atleast_1d(np.loadtxt(out_dir / "path_flat.txt")).reshape(
+            (nlam, d, d), order="F"
+        )
+        icov = np.atleast_1d(np.loadtxt(out_dir / "icov_flat.txt")).reshape(
+            (nlam, d, d), order="F"
+        )
+        return {"lambda": lam, "sparsity": sparsity, "path": path, "icov": icov}
+
+
 def run_r_glasso_reference(
     x: np.ndarray,
     lambda_gl: np.ndarray,
@@ -177,3 +233,61 @@ def run_r_glasso_reference(
         )
 
         return _load_sel_results(out_dir)
+
+
+def run_r_inference_reference(
+    x: np.ndarray,
+    t_mat: np.ndarray,
+    adj: np.ndarray,
+    *,
+    alpha: float = 0.05,
+    type_: str = "Gaussian",
+    method: str = "score",
+) -> dict[str, np.ndarray | float]:
+    """Run R ``huge.inference`` on fixed matrices."""
+
+    with tempfile.TemporaryDirectory(prefix="pyhuge_rref_inference_") as td:
+        out_dir = Path(td)
+        x_path = out_dir / "x.csv"
+        t_path = out_dir / "t.csv"
+        adj_path = out_dir / "adj.csv"
+        np.savetxt(x_path, x, delimiter=",")
+        np.savetxt(t_path, t_mat, delimiter=",")
+        np.savetxt(adj_path, adj, delimiter=",")
+
+        _run_r_script(
+            """
+            args <- commandArgs(trailingOnly = TRUE)
+            x <- as.matrix(read.csv(args[1], header=FALSE))
+            T <- as.matrix(read.csv(args[2], header=FALSE))
+            adj <- as.matrix(read.csv(args[3], header=FALSE))
+            out_dir <- args[4]
+            alpha <- as.numeric(args[5])
+            type <- args[6]
+            method <- args[7]
+
+            suppressMessages(library(huge))
+            out <- huge.inference(x, T, adj, alpha=alpha, type=type, method=method)
+            write.table(out$p, file.path(out_dir, 'p.csv'), sep=',',
+                        row.names=FALSE, col.names=FALSE)
+            write.table(out$data, file.path(out_dir, 'data.csv'), sep=',',
+                        row.names=FALSE, col.names=FALSE)
+            write.table(out$error, file.path(out_dir, 'error.txt'),
+                        row.names=FALSE, col.names=FALSE)
+            """,
+            [
+                str(x_path),
+                str(t_path),
+                str(adj_path),
+                str(out_dir),
+                str(alpha),
+                type_,
+                method,
+            ],
+        )
+
+        return {
+            "p": np.loadtxt(out_dir / "p.csv", delimiter=","),
+            "data": np.loadtxt(out_dir / "data.csv", delimiter=","),
+            "error": float(np.loadtxt(out_dir / "error.txt")),
+        }
