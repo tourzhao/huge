@@ -1,4 +1,4 @@
-"""End-to-end native tests for pyhuge 0.3."""
+"""End-to-end native tests for pyhuge."""
 
 from __future__ import annotations
 

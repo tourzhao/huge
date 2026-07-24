@@ -22,7 +22,7 @@ If you are new, follow this order:
 
 ## Runtime model
 
-`pyhuge` 0.3 is native Python:
+`pyhuge` is native Python:
 
 - Core logic in Python + NumPy/SciPy
 - Native C++ kernels (`pyhuge._native_core`) for `mb`/`glasso`/`tiger`

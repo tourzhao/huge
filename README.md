@@ -4,7 +4,7 @@
 
 <h4 align="center">General Package for High-Dimensional Undirected Graph Estimation and Inference (R + Python)</h4>
 
-___Huge___ (High-Dimensional Undirected Graph Estimation) is a general project for sparse graphical model estimation and inference in high dimensions. The core algorithm is implemented in C++ with Rcpp for portable high performance linear algebra.
+___Huge___ (High-Dimensional Undirected Graph Estimation) is a general project for sparse graphical model estimation and inference in high dimensions. The core algorithms are implemented in plain C++17 with direct BLAS calls and OpenMP parallelism; thin Rcpp and pybind11 adapters expose the same core to R and Python.
 
 This repository provides two package variants:
 
@@ -22,29 +22,27 @@ Both variants share the same C++ core and target the same modeling pipeline, inc
 
 ### Prerequisites
 
-Huge uses OpenMP to enables faster matrix multiplication. So, to use huge, you must correctly enables OpenMP for the compiler.
+Huge uses OpenMP to parallelize the core solvers. The package builds and runs without OpenMP (the `configure` script detects availability), but enabling it is recommended for large problems.
 
-For Windows and Linux users, newest version of GCC has fully support of OpenMP.
+For Windows and Linux users, recent GCC supports OpenMP out of the box.
 
-But for MAC OS users, things are a little tricky since the default llvm on MAC OS does not support OpenMP. But the solution is easy. You can simply install llvm with full OpenMP support and direct R using this version of llvm.
-
-First, install llvm with OpenMP support by typing
+For macOS users, Apple's default toolchain does not ship OpenMP. Install LLVM from Homebrew:
 
 ```
 brew install llvm
 ```
 
-Then append the following lines into `~/.R/Makevars` to enable llvm with OpenMP support to be the compiler for R packages.
+Then point R at that compiler by appending the following to `~/.R/Makevars` (Homebrew installs to `/opt/homebrew/opt/llvm` on Apple Silicon and `/usr/local/opt/llvm` on Intel):
 
 ```
-CC = /usr/local/bin/clang-omp
-CXX = /usr/local/bin/clang-omp++
-CXX98 = /usr/local/bin/clang-omp++
-CXX11 = /usr/local/bin/clang-omp++
-CXX14 = /usr/local/bin/clang-omp++
-CXX17 = /usr/local/bin/clang-omp++
-OBJC = /usr/local/bin/clang-omp
-OBJCXX = /usr/local/bin/clang-omp++
+LLVM_LOC = /opt/homebrew/opt/llvm
+CC  = $(LLVM_LOC)/bin/clang
+CXX = $(LLVM_LOC)/bin/clang++
+CXX17 = $(LLVM_LOC)/bin/clang++
+SHLIB_OPENMP_CFLAGS = -fopenmp
+SHLIB_OPENMP_CXXFLAGS = -fopenmp
+CPPFLAGS += -I$(LLVM_LOC)/include
+LDFLAGS += -L$(LLVM_LOC)/lib
 ```
 
 ### Installing from GitHub
@@ -103,6 +101,21 @@ Optional extras:
 pip install -e ".[viz]"      # matplotlib + networkx
 pip install -e ".[dev]"      # tests + docs + release tooling
 ```
+
+## Standalone C++ Core
+
+The bare C++17 core requires CMake 3.18 or newer and a 32-bit-integer (LP64)
+BLAS implementation such as OpenBLAS or Apple Accelerate:
+
+```bash
+cmake -S . -B build -DHUGE_OPENMP=ON
+cmake --build build
+cmake --install build --prefix /path/to/prefix
+```
+
+`HUGE_OPENMP=ON` falls back to a serial build when OpenMP is unavailable.
+Run `tools/check_cmake_install.sh` to build, install, and consume both the
+static and shared libraries.
 
 ### Python documentation website and CI
 

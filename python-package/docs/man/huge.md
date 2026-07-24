@@ -15,6 +15,8 @@ huge(
     sym="or",
     verbose=True,
     backend="native",
+    *,
+    input_type="auto",
 ) -> HugeResult
 ```
 
@@ -24,15 +26,31 @@ Native graph path estimation entry.
 
 ## Key arguments
 
-- `x`: 2D numeric matrix (`n_samples x n_features`) or square covariance input
+- `x`: 2D numeric matrix (`n_samples x n_features`) or a square, positive
+  semidefinite covariance input with positive diagonal
+- `input_type`: `"auto"` keeps symmetry-based detection; `"data"` forces an
+  observation matrix; `"covariance"` requires a square covariance/correlation
+  matrix. Set `"data"` for square symmetric observations
 - `method`: one of `"mb"`, `"glasso"`, `"ct"`, `"tiger"`
-- `lambda_`: strictly decreasing positive path (optional)
-- `nlambda`: path length when `lambda_` is not provided
-- `lambda_min_ratio`: minimum lambda ratio in `(0, 1]`
-- `scr`, `scr_num`: currently argument-validated for compatibility
+- `lambda_`: optional numeric scalar, NumPy 0-D value, or non-empty
+  one-dimensional sequence; multidimensional inputs are rejected. MB, glasso,
+  and TIGER require finite, positive, non-increasing values and permit ties.
+  CT requires finite, non-negative values, permits zero, and applies thresholds
+  in supplied order
+- `nlambda`: positive-integer path length when `lambda_` is not provided
+- `lambda_min_ratio`: numeric minimum lambda ratio in `(0, 1]`; like
+  `nlambda`, it is ignored when an explicit `lambda_` is supplied
+- `scr`: enables lossy correlation-neighborhood screening for MB or safe
+  coordinate screening for glasso
+- `scr_num`: MB-only number of candidate neighbors retained per node; it must
+  satisfy `1 <= scr_num < d` and requires `scr=True`. With `scr=True` and no
+  value, MB uses `n - 1` when `n < d`; when `n >= d`, screening is skipped
 - `cov_output`: only valid for `method="glasso"`
 - `sym`: only applicable to `mb` and `tiger`
 - `backend`: currently only `"native"`
+
+Python MB currently requires `input_type="data"`; CT, glasso, and TIGER also
+accept covariance/correlation input.
 
 ## Returns
 

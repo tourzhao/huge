@@ -5,6 +5,7 @@
 ^\.github$
 ^src/\.gitignore$
 ^vignettes/\.gitignore$
+^inst/doc/huge-content\.pdf$
 ^\.Rlib($|/)
 ^\.pydeps($|/)
 ^.*\.Rcheck$
@@ -14,6 +15,7 @@
 ^\.DS_Store$
 ^CMakeLists\.txt$
 ^CLAUDE\.md$
+^AGENTS\.md$
 ^\.claude($|/)
 cran-comments.md
 benchmark/*
@@ -25,5 +27,9 @@ README.md
 ^doc$
 ^Meta$
 ^backups$
+^tools$
 ^pyhuge_summary_plot\.png$
+^Rplots\.pdf$
+^Tech Report$
 ^huge_.*\.tar\.gz$
+^\.pytest_cache$

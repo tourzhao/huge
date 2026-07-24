@@ -6,13 +6,30 @@
 pip install "pyhuge[runtime]"
 ```
 
-Source install:
+Published Linux x86_64 wheels are self-contained: OpenBLAS and the OpenMP
+runtime are bundled, so no system BLAS package is needed.
+
+Source builds require a C++17 compiler and OpenBLAS development files on
+Linux. Install them first, for example:
+
+```bash
+# Ubuntu/Debian
+sudo apt-get install build-essential libopenblas-dev
+
+# Fedora/RHEL
+sudo dnf install gcc-c++ openblas-devel
+```
+
+Then install from a checkout:
 
 ```bash
 git clone https://github.com/Gatech-Flash/huge.git
 cd huge/python-package
 pip install -e ".[runtime]"
 ```
+
+Native source builds currently support Linux and macOS. Windows source builds
+are not yet supported; use a Linux environment or container.
 
 ## Optional extras
 
@@ -32,9 +49,33 @@ pyhuge-doctor
 
 `runtime=True` means core dependencies are available.
 
+## OpenMP (multicore solvers)
+
+The C++ core parallelizes its per-column solvers (mb, tiger, and parts of
+glasso) with OpenMP. Linux source builds request OpenMP by default, while
+macOS source builds enable it when Homebrew `libomp` is found. If the Linux
+toolchain lacks OpenMP, set `PYHUGE_NO_OPENMP=1` to build a serial extension.
+
+- **Linux wheel**: no additional runtime package is needed.
+- **Linux source build**: use a compiler with OpenMP support; the package also
+  needs the OpenBLAS development package shown above.
+- **macOS**: install Homebrew's libomp *before* building:
+
+  ```bash
+  brew install libomp
+  pip install --force-reinstall --no-binary :all: pyhuge
+  # or for a source checkout: pip install -e . (after brew install libomp)
+  ```
+
+- Opt out with `PYHUGE_NO_OPENMP=1 pip install ...`.
+
+Check whether your build is parallel with `pyhuge-doctor`: the
+`native_core.omp_max_threads` field reports the thread count (1 means a
+serial build).
+
 ## Apple Silicon / architecture notes
 
-`pyhuge` 0.3 does not depend on R architecture, but Python/native wheels must
+`pyhuge` does not depend on R architecture, but Python/native wheels must
 match your interpreter architecture. Check:
 
 ```bash

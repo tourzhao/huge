@@ -1,4 +1,4 @@
-"""pyhuge 0.8 native package."""
+"""pyhuge: native Python package for high-dimensional undirected graph estimation."""
 
 from __future__ import annotations
 
@@ -66,7 +66,7 @@ __all__ = [
     "test",
 ]
 
-__version__ = "0.8.1"
+__version__ = "2.0.0"
 
 
 def test(require_runtime: bool = False) -> dict[str, bool]:

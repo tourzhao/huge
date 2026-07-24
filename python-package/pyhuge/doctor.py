@@ -20,6 +20,20 @@ def _pkg_version(name: str) -> str | None:
         return None
 
 
+def _native_omp_threads() -> int | None:
+    """OpenMP thread count of the native core (1 = serial build).
+
+    Returns None when the native extension is missing or predates the
+    diagnostic binding.
+    """
+    try:
+        from . import _native_core
+
+        return int(_native_core.omp_max_threads())
+    except Exception:
+        return None
+
+
 def diagnose() -> dict[str, Any]:
     """Collect environment diagnostics."""
 
@@ -27,6 +41,9 @@ def diagnose() -> dict[str, Any]:
 
     test_status = test(require_runtime=False)
     return {
+        "native_core": {
+            "omp_max_threads": _native_omp_threads(),
+        },
         "python": {
             "version": sys.version.split()[0],
             "executable": sys.executable,
@@ -42,10 +59,8 @@ def diagnose() -> dict[str, Any]:
             "pyhuge": _pkg_version("pyhuge"),
             "numpy": _pkg_version("numpy"),
             "scipy": _pkg_version("scipy"),
-            "scikit-learn": _pkg_version("scikit-learn"),
             "matplotlib": _pkg_version("matplotlib"),
             "networkx": _pkg_version("networkx"),
-            "rpy2": _pkg_version("rpy2"),
         },
         "status": test_status,
     }

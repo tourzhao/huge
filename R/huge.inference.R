@@ -8,15 +8,15 @@
 #' Implements the inference for high dimensional graphical models, including Gaussian and Nonparanormal graphical models
 #' We consider the problems of testing the presence of a single edge and the hypothesis is that the edge is absent.
 #'
-#' For Nonparanormal graphical model we provide Score test method and Wald Test. However it is really slow for inferencing on Nonparanormal model, especially for large data.
+#' For Nonparanormal graphical model we provide Score test method and Wald Test. However it is really slow for inferencing on Nonparanormal model, especially for large data. Gaussian inference supports one variable, while Nonparanormal inference requires at least two. Nonparanormal score-test diagonal p-values do not represent edges and may be undefined; every tested off-diagonal p-value must be finite.
 #'
 #'
-#' @param data The input \code{n} by \code{d} data matrix(\code{n} is the sample size and \code{d} is the dimension).
-#' @param T The estimated inverse of correlation matrix of the data.
-#' @param adj The adjacency matrix corresponding to the graph.
-#' @param alpha The significance level of hypothesis.The default value is \code{0.05}.
+#' @param data A finite numeric \code{n} by \code{d} data matrix with at least two observations and no constant columns.
+#' @param T A finite \code{d} by \code{d} estimate of the inverse correlation matrix with a positive diagonal.
+#' @param adj A finite numeric or logical \code{d} by \code{d} adjacency matrix corresponding to the graph.
+#' @param alpha The significance level in \code{(0, 1]}. The default value is \code{0.05}.
 #' @param type The type of input data. There are 2 options: \code{"Gaussian"} and \code{"Nonparanormal"}. The default value is \code{"Gaussian"}.
-#' @param method When using nonparanormal graphical model. Test method with 2 options: \code{"score"} and \code{"wald"}. The default value is \code{"score"}.
+#' @param method For a Nonparanormal model, the test method: \code{"score"} or \code{"wald"}. The default is \code{"score"}. Ignored for Gaussian inference.
 #' @seealso \code{\link{huge}}, and \code{\link{huge-package}}.
 #' @return
 #' An object is returned:
@@ -56,29 +56,83 @@
 #' 2.J Jankova, S Van De Geer. Confidence intervals for high-dimensional inverse covariance estimation. \emph{Electronic Journal of Statistics}, 2015.\cr
 #' @export
 huge.inference = function(data, T, adj, alpha = 0.05, type = "Gaussian", method = "score"){
+  if(length(type) != 1 || !is.character(type) || is.na(type) ||
+     !(type %in% c("Gaussian", "Nonparanormal")))
+    stop("type must be exactly one of \"Gaussian\" or \"Nonparanormal\".")
+  if(type == "Nonparanormal" &&
+     (length(method) != 1 || !is.character(method) || is.na(method) ||
+      !(method %in% c("score", "wald"))))
+    stop("method must be exactly one of \"score\" or \"wald\".")
+  if(length(alpha) != 1 || !is.numeric(alpha) || !is.finite(alpha) ||
+     alpha <= 0 || alpha > 1)
+    stop("alpha must be a finite number in (0, 1].")
+
+  if(!(is.matrix(data) || inherits(data, "Matrix")))
+    stop("data must be a numeric matrix.")
+  data.input = data
+  data = as.matrix(data)
+  if(!is.numeric(data))
+    stop("data must be a numeric matrix.")
   d = ncol(data)
   n = nrow(data)
+  if(n < 1 || d < 1)
+    stop("data must be a non-empty numeric matrix.")
+  if(any(!is.finite(data)))
+    stop("data must contain only finite values.")
+  if(n < 2)
+    stop("Inference requires at least two observations.")
+  if(type == "Nonparanormal" && d < 2)
+    stop("Nonparanormal inference requires at least two variables.")
+  constant = vapply(seq_len(d), function(j) {
+    all(data[, j] == data[1, j])
+  }, logical(1))
+  if(any(constant))
+    stop("Inference data contains a constant column.")
+
+  if(!(is.matrix(T) || inherits(T, "Matrix")))
+    stop(sprintf("T must be a numeric %d by %d matrix.", d, d))
+  T = as.matrix(T)
+  if(!is.numeric(T) || !identical(dim(T), c(d, d)))
+    stop(sprintf("T must be a numeric %d by %d matrix.", d, d))
+  if(any(!is.finite(T)))
+    stop("T must contain only finite values.")
+
+  if(!(is.matrix(adj) || inherits(adj, "Matrix")))
+    stop(sprintf("adj must be a numeric or logical %d by %d matrix.", d, d))
+  adj = as.matrix(adj)
+  if((!is.numeric(adj) && !is.logical(adj)) ||
+     !identical(dim(adj), c(d, d)))
+    stop(sprintf("adj must be a numeric or logical %d by %d matrix.", d, d))
+  if(any(!is.finite(adj)))
+    stop("adj must contain only finite values.")
+  if(any(diag(T) <= 0))
+    stop("T must have a positive diagonal.")
 
   if(type == "Gaussian")
   {
-    x=scale(data)
-    U=cor(x)
-    W<-2*T - T%*%U%*%T
-    W_n<-matrix(0,d,d)
-    sigma<-matrix(0,d,d)
-    for(j in 1:d)
-    {
-      for (k in 1:d)
-      {
-        sigma[j, k] = sqrt(T[j, j]*T[k, k]+T[j, k]^2)
-        W_n[j, k] = sqrt(n)*W[j, k]/sigma[j, k]
-      }
-    }
-    p<-2*(1 - pnorm(abs(W_n)))
-    rm(sigma,W_n)
+    U = tryCatch(
+      suppressWarnings(.huge_fast_cor(data)),
+      error = function(e) NULL
+    )
+    if(is.null(U) || any(!is.finite(U)))
+      stop("Gaussian inference cannot form a finite correlation matrix.")
+    # De-biased estimator W = 2T - T U T with asymptotic standard deviation
+    # sigma[j,k] = sqrt(T[j,j] T[k,k] + T[j,k]^2) (Jankova & van de Geer).
+    variance = outer(diag(T), diag(T)) + T^2
+    if(any(!is.finite(variance)) || any(variance <= 0))
+      stop(paste(
+        "Gaussian inference variance must be finite and positive;",
+        "check the scale of T."
+      ))
+    W = 2*T - T%*%U%*%T
+    sigma = sqrt(variance)
+    p = 2*(1 - pnorm(abs(sqrt(n)*W/sigma)))
   }
   if(type == "Nonparanormal")
   {
+    diag.outer = outer(diag(T), diag(T))
+    if(any(!is.finite(diag.outer)) || any(diag.outer <= 0))
+      stop("Products of T diagonal entries must remain finite and positive.")
     x=data
     U<-matrix(0,d,d)
     G=list()
@@ -100,7 +154,8 @@ huge.inference = function(data, T, adj, alpha = 0.05, type = "Gaussian", method 
         {
           for(i2 in 1:n)
           {
-            Temp_jk[i1, i2] = sign((x[i1, j] - x[i2, j])*(x[i1, k] - x[i2, k]))
+            Temp_jk[i1, i2] = sign(x[i1, j] - x[i2, j]) *
+              sign(x[i1, k] - x[i2, k])
             G[[i1]][j, k] = G[[i1]][j, k] - pi/2*Temp_jk[i1, i2]
 
           }
@@ -205,6 +260,18 @@ huge.inference = function(data, T, adj, alpha = 0.05, type = "Gaussian", method 
     rm(R,F,G,w,T_k)
   }
 
+  offdiag = row(p) != col(p)
+  finite.p = if(type == "Gaussian") {
+    all(is.finite(p))
+  } else {
+    all(is.finite(p[offdiag]))
+  }
+  if(!finite.p)
+    stop(paste(
+      "Inference produced non-finite edge p-values;",
+      "the inputs are numerically degenerate."
+    ))
+
   error=0
   for(j in 1:d)
   {
@@ -221,7 +288,7 @@ huge.inference = function(data, T, adj, alpha = 0.05, type = "Gaussian", method 
 
 
   inf = list()
-  inf$data = data
+  inf$data = data.input
   inf$p = p
   inf$error = error
 

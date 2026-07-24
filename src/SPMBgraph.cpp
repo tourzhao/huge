@@ -3,6 +3,14 @@
 #include "huge/huge_core.h"
 using namespace Rcpp;
 
+static void validate_lambda_dimensions(const NumericVector& lambda) {
+    if (lambda.hasAttribute("dim")) {
+        IntegerVector dimensions = lambda.attr("dim");
+        if (dimensions.size() > 1)
+            stop("lambda must be a one-dimensional numeric vector.");
+    }
+}
+
 // Helper: convert core ColResult vector to R sparse-like output
 static List mb_result_to_list(const huge::MBResult& res, int d) {
     int total_nnz = 0;
@@ -24,21 +32,27 @@ static List mb_result_to_list(const huge::MBResult& res, int d) {
     return List::create(
         _["col_cnz"] = col_cnz,
         _["row_idx"] = row_idx,
-        _["x"] = x
+        _["x"] = x,
+        _["hit_max_iter"] = res.hit_max_iter
     );
 }
 
 //[[Rcpp::export]]
-List SPMBscr(NumericMatrix S, NumericVector lambda, int nlambda, int d, int maxdf, IntegerMatrix idx_scr, int nscr)
+List SPMBscr(NumericMatrix S, NumericVector lambda, int nlambda, int d, IntegerMatrix idx_scr, int nscr)
 {
-    if (d <= 0 || nlambda <= 0 || maxdf <= 0 || nscr < 0) {
-        int d_safe = d > 0 ? d : 0;
-        return List::create(
-            _["col_cnz"] = IntegerVector(d_safe + 1),
-            _["row_idx"] = IntegerVector(0),
-            _["x"] = NumericVector(0)
-        );
-    }
+    if (d <= 0)
+        stop("d must be positive.");
+    if (nlambda <= 0)
+        stop("nlambda must be positive.");
+    if (S.nrow() != d || S.ncol() != d)
+        stop("S must be a d by d matrix.");
+    validate_lambda_dimensions(lambda);
+    if (lambda.size() != nlambda)
+        stop("lambda length must equal nlambda.");
+    if (nscr <= 0 || nscr >= d)
+        stop("idx_scr must have between 1 and d - 1 rows.");
+    if (idx_scr.nrow() != nscr || idx_scr.ncol() != d)
+        stop("idx_scr must be an nscr by d matrix.");
 
     huge::MBResult res = huge::mb_scr(S.begin(), d, lambda.begin(), nlambda,
                                       idx_scr.begin(), nscr);
@@ -46,16 +60,17 @@ List SPMBscr(NumericMatrix S, NumericVector lambda, int nlambda, int d, int maxd
 }
 
 //[[Rcpp::export]]
-List SPMBgraph(NumericMatrix S, NumericVector lambda, int nlambda, int d, int maxdf)
+List SPMBgraph(NumericMatrix S, NumericVector lambda, int nlambda, int d)
 {
-    if (d <= 0 || nlambda <= 0 || maxdf <= 0) {
-        int d_safe = d > 0 ? d : 0;
-        return List::create(
-            _["col_cnz"] = IntegerVector(d_safe + 1),
-            _["row_idx"] = IntegerVector(0),
-            _["x"] = NumericVector(0)
-        );
-    }
+    if (d <= 0)
+        stop("d must be positive.");
+    if (nlambda <= 0)
+        stop("nlambda must be positive.");
+    if (S.nrow() != d || S.ncol() != d)
+        stop("S must be a d by d matrix.");
+    validate_lambda_dimensions(lambda);
+    if (lambda.size() != nlambda)
+        stop("lambda length must equal nlambda.");
 
     huge::MBResult res = huge::mb(S.begin(), d, lambda.begin(), nlambda);
     return mb_result_to_list(res, d);
