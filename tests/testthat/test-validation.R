@@ -620,14 +620,6 @@ test_that("estimator entries reject invalid covariance matrices", {
     cauchy.schwarz = list(
       value = matrix(c(1, 2, 2, 1), 2, 2),
       message = "valid covariance"
-    ),
-    non.psd = list(
-      value = matrix(c(
-        1, .9, .9,
-        .9, 1, 0,
-        .9, 0, 1
-      ), 3, 3, byrow = TRUE),
-      message = "positive semidefinite"
     )
   )
 
@@ -641,6 +633,49 @@ test_that("estimator entries reject invalid covariance matrices", {
         )
       }
     }
+  }
+})
+
+test_that("non-PSD covariance is accepted only when glasso regularizes it", {
+  S <- matrix(c(
+    1, .9, .9,
+    .9, 1, 0,
+    .9, 0, 1
+  ), 3, 3, byrow = TRUE)
+
+  for(method in c("ct", "mb", "tiger")) {
+    for(direct in c(FALSE, TRUE)) {
+      expect_error(
+        run_estimator_entry(method, S, direct, lambda = .5),
+        "positive semidefinite",
+        info = paste(method, if (direct) "direct" else "huge")
+      )
+    }
+  }
+
+  for(direct in c(FALSE, TRUE)) {
+    args <- list(
+      x = S, lambda = .5, cov.output = TRUE, verbose = FALSE
+    )
+    if(direct) {
+      fit <- do.call(huge.glasso, args)
+    } else {
+      args$method <- "glasso"
+      fit <- do.call(huge, args)
+    }
+    precision <- fit$icov[[1]]
+    covariance <- fit$cov[[1]]
+    expect_gt(
+      min(eigen(precision, symmetric = TRUE, only.values = TRUE)$values),
+      0
+    )
+    expect_gt(
+      min(eigen(covariance, symmetric = TRUE, only.values = TRUE)$values),
+      0
+    )
+    expect_true(
+      max(rowSums(abs(covariance %*% precision - diag(3)))) <= 1e-2
+    )
   }
 })
 

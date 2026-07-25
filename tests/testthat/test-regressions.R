@@ -172,8 +172,42 @@ test_that("huge() rejects unknown method (2.0.0: returned half-empty object)", {
   expect_error(huge(x, method = "bogus", verbose = FALSE))
 })
 
+test_that("huge.select preserves its historical positional verbose argument", {
+  expect_identical(
+    tail(names(formals(huge.select)), 3),
+    c("rep.num", "verbose", "num.cores")
+  )
+
+  set.seed(3)
+  x = matrix(rnorm(60 * 10), 60, 10)
+  fit = huge(x, method = "mb", nlambda = 4, verbose = FALSE)
+  set.seed(19)
+  named = huge.select(fit, criterion = "ric", rep.num = 2, verbose = FALSE)
+  set.seed(19)
+  positional = huge.select(fit, "ric", 0.5, 0.1, NULL, 2, FALSE)
+  expect_identical(positional, named)
+})
+
 test_that("stars num.cores > 1 reproduces serial results exactly", {
   skip_on_os("windows")
+  with.check.core.limit = function(code) {
+    previous = Sys.getenv("_R_CHECK_LIMIT_CORES_", unset = NA_character_)
+    on.exit({
+      if(is.na(previous))
+        Sys.unsetenv("_R_CHECK_LIMIT_CORES_")
+      else
+        do.call(
+          Sys.setenv,
+          setNames(list(previous), "_R_CHECK_LIMIT_CORES_")
+        )
+    }, add = TRUE)
+    do.call(
+      Sys.setenv,
+      setNames(list("TRUE"), "_R_CHECK_LIMIT_CORES_")
+    )
+    force(code)
+  }
+
   set.seed(3)
   x = matrix(rnorm(120 * 30), 120, 30)
   fit = huge(x, method = "mb", nlambda = 5, verbose = FALSE)
@@ -182,13 +216,16 @@ test_that("stars num.cores > 1 reproduces serial results exactly", {
   set.seed(42); expect_warning(
     s2 <- huge.select(fit, criterion = "stars", rep.num = 4,
                       num.cores = 2, verbose = FALSE),
-    "OpenMP or BLAS"
+    "OpenMP.*BLAS"
   )
-  set.seed(42); expect_warning(
-    s3 <- huge.select(fit, criterion = "stars", rep.num = 4,
-                      num.cores = 20, verbose = FALSE),
-    "OpenMP or BLAS"
-  )
+  s3 = with.check.core.limit({
+    set.seed(42)
+    expect_warning(
+      huge.select(fit, criterion = "stars", rep.num = 4,
+                  num.cores = 20, verbose = FALSE),
+      "OpenMP.*BLAS"
+    )
+  })
   expect_identical(s1$opt.index, s2$opt.index)
   expect_equal(s1$variability, s2$variability, tolerance = 0)
   expect_identical(s1$opt.index, s3$opt.index)

@@ -19,12 +19,18 @@
 #' @param input.type How to interpret \code{x}: \code{"auto"} preserves
 #'   symmetry-based detection, \code{"data"} forces an observation matrix,
 #'   and \code{"covariance"} requires a square covariance or correlation
-#'   matrix.
+#'   matrix. For covariance input with \code{lambda = NULL}, \code{"auto"}
+#'   retains the historical diagonal-sensitive lambda scale; use
+#'   \code{"covariance"} for a scale based only on off-diagonal entries.
+#'   Indefinite pairwise covariance estimates are accepted only when
+#'   regularization produces a certified positive-definite result.
 #' @seealso \code{\link{huge}}, and \code{\link{huge-package}}.
 #' @export
 huge.glasso = function(x, lambda = NULL, lambda.min.ratio = NULL, nlambda = NULL, scr = NULL, cov.output = FALSE, verbose = TRUE, input.type = "auto"){
 
-  inp = .huge_validate_estimation_input(x, input.type = input.type)
+  inp = .huge_validate_estimation_input(
+    x, input.type = input.type, require.psd = FALSE
+  )
   x = inp$input
   n = inp$n
   d = inp$d
@@ -41,7 +47,11 @@ huge.glasso = function(x, lambda = NULL, lambda.min.ratio = NULL, nlambda = NULL
       stop("Raw data x cannot produce a finite correlation matrix.")
   }
   if(is.null(scr)) scr = FALSE
-  lam = .huge_default_lambda(S, d, nlambda, lambda.min.ratio, lambda)
+  lam = .huge_default_lambda(
+    S, d, nlambda, lambda.min.ratio, lambda,
+    legacy.glasso.covariance =
+      cov.input && input.type == "auto"
+  )
   lambda = lam$lambda; nlambda = lam$nlambda
 
   fit = .Call("_huge_hugeglasso",S,lambda,scr,verbose,cov.output,PACKAGE="huge")

@@ -24,6 +24,12 @@ Native entry for graph-path estimation.
 `input_type="auto"` preserves symmetry-based detection. Use `"data"` for a
 square symmetric observation matrix, or `"covariance"` to require a square
 covariance/correlation matrix.
+For glasso with no explicit lambda, auto-detected covariance input matches R's
+historical diagonal-sensitive default scale; explicit covariance routing uses
+the corrected off-diagonal scale. Glasso may accept an indefinite
+pairwise estimate only when the native solver certifies a positive-definite,
+internally consistent result. CT and TIGER continue to require positive
+semidefiniteness.
 
 ## `pyhuge.test`
 
