@@ -58,6 +58,11 @@ The compatible default `input_type="auto"` detects covariance input by
 symmetry. If observations happen to form a square symmetric matrix, pass
 `input_type="data"` explicitly; use `"covariance"` to require covariance
 routing and validation.
+For glasso without an explicit lambda, `"auto"` matches R's historical
+diagonal-sensitive default scale, while `"covariance"` uses only
+off-diagonal entries. CT and TIGER require a positive-semidefinite covariance
+matrix. Glasso may accept an indefinite pairwise estimate only when its
+regularized covariance/precision result passes native certification.
 
 ## Is there a built-in dataset?
 

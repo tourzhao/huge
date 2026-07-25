@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import warnings
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -257,7 +258,15 @@ def test_nonparanormal_inference_handles_extreme_finite_ranks(method):
     assert np.isfinite(result.p[1, 0])
 
 
-def test_non_eps_plot_ignores_file_naming_arguments(tmp_path):
+def test_non_eps_plot_ignores_file_naming_arguments(tmp_path, monkeypatch):
+    axis = SimpleNamespace(figure=object())
+    closed = []
+    monkeypatch.setattr("pyhuge.core.huge_plot_network", lambda *args, **kwargs: axis)
+    monkeypatch.setattr(
+        "pyhuge.core._mpl_pyplot",
+        lambda: SimpleNamespace(close=closed.append),
+    )
+
     graph = np.zeros((3, 3))
     assert (
         huge_plot(
@@ -269,6 +278,7 @@ def test_non_eps_plot_ignores_file_naming_arguments(tmp_path):
         )
         is None
     )
+    assert closed == [axis.figure]
 
     with pytest.raises(PyHugeError, match="cur_num.*positive integer"):
         huge_plot(graph, epsflag=True, cur_num=0)

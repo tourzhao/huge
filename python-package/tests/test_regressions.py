@@ -169,7 +169,7 @@ def test_glasso_loglik_has_no_absolute_pivot_scale():
 
 
 @pytest.mark.parametrize("cov_output", (False, True))
-def test_glasso_rejects_uncertified_covariance_precision_pairs(cov_output):
+def test_glasso_rejects_non_spd_precision_paths(cov_output):
     rho = 0.9999
     covariance = np.full((3, 3), rho)
     np.fill_diagonal(covariance, 1.0)
@@ -183,16 +183,107 @@ def test_glasso_rejects_uncertified_covariance_precision_pairs(cov_output):
             verbose=False,
         )
 
-    with pytest.raises(
-        PyHugeError, match="inconsistent precision and covariance"
-    ):
-        huge(
+
+def test_glasso_refines_precision_after_symmetrization():
+    rho = 0.9999
+    covariance = np.full((3, 3), rho)
+    np.fill_diagonal(covariance, 1.0)
+
+    fit = huge(
+        covariance,
+        method="glasso",
+        lambda_=[0.01],
+        cov_output=True,
+        verbose=False,
+    )
+    fit_without_cov = huge(
+        covariance,
+        method="glasso",
+        lambda_=[0.01],
+        cov_output=False,
+        verbose=False,
+    )
+    precision = fit.icov[0]
+    assert np.array_equal(precision, precision.T)
+    assert fit_without_cov.icov[0] == pytest.approx(precision, abs=1e-12)
+    assert np.linalg.slogdet(precision)[0] > 0
+    residual = np.linalg.norm(
+        fit.cov[0] @ precision - np.eye(3), ord=np.inf
+    )
+    assert residual <= 1e-2
+
+
+def test_glasso_returns_coherent_pair_for_ill_conditioned_toeplitz_input():
+    d = 20
+    rho = 0.99
+    index = np.arange(d)
+    covariance = rho ** np.abs(index[:, None] - index[None, :])
+
+    fit = huge(
+        covariance,
+        method="glasso",
+        lambda_=[0.001],
+        cov_output=True,
+        verbose=False,
+    )
+
+    precision = fit.icov[0]
+    estimated_covariance = fit.cov[0]
+    assert np.array_equal(precision, precision.T)
+    assert np.array_equal(estimated_covariance, estimated_covariance.T)
+    assert np.linalg.slogdet(precision)[0] > 0
+    assert np.linalg.slogdet(estimated_covariance)[0] > 0
+    residual = np.linalg.norm(
+        estimated_covariance @ precision - np.eye(d), ord=np.inf
+    )
+    assert residual <= 1e-2
+
+
+def test_glasso_refines_a_finite_iteration_limit_candidate():
+    covariance = np.asarray(
+        [
+            [
+                1.0000000000000002, 0.18009786022575919,
+                -0.10400558762095684, 0.76774091516199638,
+                0.18742182119843603,
+            ],
+            [
+                0.18009786022575919, 1, 0.83834121674080364,
+                0.48252423066148048, -0.066223216563695037,
+            ],
+            [
+                -0.10400558762095684, 0.83834121674080364, 1,
+                0.097388083759665525, -0.56897959252915542,
+            ],
+            [
+                0.76774091516199638, 0.48252423066148048,
+                0.097388083759665525, 1.0000000000000002,
+                0.44589188604391788,
+            ],
+            [
+                0.18742182119843603, -0.066223216563695037,
+                -0.56897959252915542, 0.44589188604391788,
+                0.99999999999999989,
+            ],
+        ],
+        dtype=float,
+    )
+
+    with pytest.warns(RuntimeWarning, match="iteration limit"):
+        fit = huge(
             covariance,
             method="glasso",
-            lambda_=[0.01],
-            cov_output=cov_output,
+            lambda_=[0.00083834121674080362],
+            cov_output=True,
+            input_type="covariance",
             verbose=False,
         )
+
+    assert np.linalg.slogdet(fit.icov[0])[0] > 0
+    residual = np.linalg.norm(
+        fit.cov[0] @ fit.icov[0] - np.eye(5), ord=np.inf
+    )
+    assert residual <= 1e-2
 
 
 @pytest.mark.parametrize("cov_output", (False, True))
@@ -832,7 +923,7 @@ def test_covariance_input_rejects_cauchy_schwarz_violation(method):
         huge(covariance, method=method, lambda_=[0.25], verbose=False)
 
 
-@pytest.mark.parametrize("method", ("ct", "glasso", "tiger"))
+@pytest.mark.parametrize("method", ("ct", "tiger"))
 def test_covariance_input_rejects_non_positive_semidefinite_matrix(method):
     covariance = np.asarray(
         [[1.0, 0.9, 0.9], [0.9, 1.0, 0.0], [0.9, 0.0, 1.0]]
@@ -840,6 +931,37 @@ def test_covariance_input_rejects_non_positive_semidefinite_matrix(method):
 
     with pytest.raises(PyHugeError, match="positive semidefinite"):
         huge(covariance, method=method, lambda_=[1.0], verbose=False)
+
+
+def test_glasso_regularizes_indefinite_covariance_input():
+    covariance = np.asarray(
+        [[1.0, 0.9, 0.9], [0.9, 1.0, 0.0], [0.9, 0.0, 1.0]]
+    )
+
+    fits = (
+        huge(
+            covariance,
+            method="glasso",
+            lambda_=[0.5],
+            cov_output=True,
+            verbose=False,
+        ),
+        huge_glasso(
+            covariance,
+            lambda_=[0.5],
+            cov_output=True,
+            verbose=False,
+        ),
+    )
+    for fit in fits:
+        precision = fit.icov[0]
+        estimate = fit.cov[0]
+        assert np.linalg.eigvalsh(precision).min() > 0.0
+        assert np.linalg.eigvalsh(estimate).min() > 0.0
+        residual = np.linalg.norm(
+            estimate @ precision - np.eye(3), ord=np.inf
+        )
+        assert residual <= 1e-2
 
 
 def test_tiger_native_rejects_non_positive_semidefinite_covariance():
@@ -1260,10 +1382,37 @@ def test_weak_nonzero_covariance_sets_glasso_default_lambda():
         method="glasso",
         nlambda=3,
         lambda_min_ratio=0.2,
+        input_type="covariance",
         verbose=False,
     )
 
     assert fit.lambda_path == pytest.approx(expected, rel=1e-12, abs=0.0)
+
+
+def test_glasso_auto_covariance_matches_r_historical_default_lambda_scale():
+    covariance = np.asarray([[0.001, 0.002], [0.002, 0.02]])
+    legacy_max = float(np.max(np.abs(covariance - np.eye(2))))
+
+    automatic = huge(
+        covariance,
+        method="glasso",
+        nlambda=2,
+        lambda_min_ratio=0.1,
+        verbose=False,
+    )
+    explicit = huge(
+        covariance,
+        method="glasso",
+        nlambda=2,
+        lambda_min_ratio=0.1,
+        input_type="covariance",
+        verbose=False,
+    )
+
+    assert automatic.lambda_path == pytest.approx(
+        [legacy_max, 0.1 * legacy_max], abs=1e-15
+    )
+    assert explicit.lambda_path == pytest.approx([0.002, 0.0002], abs=1e-15)
 
 
 def test_default_regularization_path_retains_small_and_subnormal_tails():

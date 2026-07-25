@@ -3,6 +3,7 @@
 #include <cmath>
 #include <limits>
 #include "huge/huge_core.h"
+#include "huge_r_threads.h"
 using namespace Rcpp;
 
 //[[Rcpp::export]]
@@ -40,5 +41,6 @@ double RIC(NumericMatrix &X, int d, int n, NumericVector &r, int t)
     if (d <= 1)
         return 0.0;
     // X is column-major in R (NumericMatrix)
+    huge::RThreadLimitGuard thread_limit;
     return huge::ric(X.begin(), n, d, r_int.data(), t);
 }

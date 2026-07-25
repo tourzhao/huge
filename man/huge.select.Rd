@@ -11,8 +11,8 @@ huge.select(
   stars.thresh = 0.1,
   stars.subsample.ratio = NULL,
   rep.num = 20,
-  num.cores = 1,
-  verbose = TRUE
+  verbose = TRUE,
+  num.cores = 1
 )
 }
 \arguments{
@@ -28,9 +28,9 @@ huge.select(
 
 \item{rep.num}{The number of subsamplings when \code{criterion = "stars"} or rotations when \code{criterion = "ric"}. The default value is \code{20}. NOT applicable when \code{criterion = "ebic"}.}
 
-\item{num.cores}{The number of CPU cores used to fit the stars subsamplings in parallel via \code{parallel::mclapply}. The default value is \code{1} (serial). Values greater than 1 use process forking and are ignored on Windows. Each worker may also start OpenMP or BLAS threads, so \code{num.cores = 1} is the portable choice when a bounded thread budget or fork safety matters. Results are identical to the serial path for the same random seed. Only applicable when \code{criterion = "stars"}.}
-
 \item{verbose}{If \code{verbose = FALSE}, tracing information printing is disabled. The default value is \code{TRUE}.}
+
+\item{num.cores}{The number of CPU cores used to fit the stars subsamplings in parallel via \code{parallel::mclapply}. The default value is \code{1} (serial). At most two forked workers are used, and this argument is ignored on Windows. Each forked worker limits huge's native OpenMP code to one thread, but an external threaded BLAS may still create additional threads; \code{num.cores = 1} is the portable choice when a bounded thread budget or fork safety matters. Results are identical to the serial path for the same random seed. Only applicable when \code{criterion = "stars"}.}
 }
 \value{
 An object with S3 class "select" is returned:

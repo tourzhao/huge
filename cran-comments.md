@@ -1,29 +1,48 @@
 ## Test environments
+
 * macOS Tahoe 26.5, R 4.5.2 (aarch64-apple-darwin20)
-* GitHub Actions: ubuntu-latest R release, ubuntu-latest R devel, windows-latest R release
+* Debian Linux, R 4.6.1 development (aarch64-linux-gnu), OpenMP enabled
 
 ## R CMD check results
-* All three CI platforms: Status OK (0 errors, 0 warnings, 0 notes)
-* Local `R CMD check --as-cran`: 2 local-only WARNINGs and 1 local-only
-  NOTE — R's own header (`R_ext/Boolean.h`) triggering
-  `-Wunknown-warning-option` under Apple clang 21, the missing
-  `checkbashisms` script, and `unable to verify current time`. None come
-  from package code; none appear on CRAN/CI servers.
+
+The final source tarball completed `R CMD check --as-cran` with 0 errors,
+0 warnings, and 1 note on Debian Linux. The note reports
+`-mbranch-protection=standard`; this flag is supplied by that R installation's
+default `CXX17FLAGS`, not by the package.
+
+The local macOS check additionally reports Apple clang's warning for an
+unsupported diagnostic pragma in R's own `R_ext/Boolean.h`, an unavailable
+`checkbashisms` executable, and inability to verify the current time. None is
+emitted by package code.
+
+## Reverse dependencies
+
+We checked all eight identified reverse dependencies: `heterocop`, `NetGreg`,
+`netgwas`, `nethet`, `nutriNetwork`, `sparsenetgls`, `SparseTSCGM`, and
+`SpiecEasi`.
+
+Seven completed with Status OK. For `nethet`, tests and all vignette R code
+completed successfully; its full PDF build was unavailable because `pdflatex`
+was absent from that check container, while its remaining warning and notes
+are diagnostics from `nethet` itself. No new problems attributable to `huge`
+were found.
 
 ## Submission
-This is a major update from version 1.6 to 2.0.0. Changes include:
 
-* Fixed tiger method returning asymmetric precision matrices
-* Fixed RIC selection scale-dependence (rescaling input data silently
-  changed the selected graph)
-* Fixed huge.npn(npn.func = "skeptic") erroring on input with row names
-* Added huge.select(num.cores = k): parallel StARS subsampling via the
-  base parallel package (new Imports: parallel)
-* Performance: BLAS matrix products in RIC (~10-20x), strong screening rule
-  with KKT certification in mb (~1.2x), incremental residual updates in
-  tiger (~1.4x), active-set covariance updates in glasso (~1.15x),
-  BLAS crossprod correlations and other R-layer vectorizations (ct ~2x,
-  skeptic ~5x, roc ~3x, generator ~1.6x)
-* Reduced memory use by keeping sparse matrices sparse in the R layer
-* Fixed graphics parameter leaks in all plot functions (par restored on exit)
-* Documentation corrections (dimensions, defaults, typos)
+This is a major update to version 2.0.0 focused on correctness, numerical
+validation, and bounded parallel execution.
+
+* TIGER now receives the original matrix and resolved input type in C++.
+  Covariance validation, correlation construction, automatic lambda selection,
+  and fitting therefore use the same native correlation matrix.
+* Glasso symmetrizes and verifies precision estimates, checks positive
+  definiteness, and certifies covariance/precision consistency. Indefinite
+  pairwise covariance estimates are accepted only when regularization produces
+  a certified result.
+* Auto-detected glasso covariance input retains the historical default-lambda
+  scale for compatibility. Explicit covariance input uses the corrected
+  off-diagonal scale; explicit lambda paths are unchanged.
+* Parallel StARS starts at most two workers. Package-owned OpenMP regions use
+  one thread in each child; the default remains serial.
+* Input and lambda-path validation, solver diagnostics, documentation, and
+  memory handling were also improved.

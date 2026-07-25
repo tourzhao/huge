@@ -30,6 +30,12 @@
 #'   symmetry-based detection, \code{"data"} forces an observation matrix,
 #'   and \code{"covariance"} requires a square covariance or correlation
 #'   matrix. Use \code{"data"} for square symmetric observation matrices.
+#'   For glasso covariance input, \code{"auto"} retains the historical
+#'   diagonal-sensitive default lambda scale; use \code{"covariance"} for a
+#'   scale based only on off-diagonal entries. Glasso may accept an indefinite
+#'   pairwise covariance estimate when regularization produces a certified
+#'   positive-definite result; CT, MB, and TIGER require positive
+#'   semidefiniteness.
 #' @return
 #' An object with S3 class \code{"huge"} is returned:
 #' \item{data}{

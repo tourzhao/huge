@@ -14,6 +14,7 @@
 ^config\.log$
 ^\.DS_Store$
 ^CMakeLists\.txt$
+^cmake$
 ^CLAUDE\.md$
 ^AGENTS\.md$
 ^\.claude($|/)
@@ -30,6 +31,7 @@ README.md
 ^tools$
 ^pyhuge_summary_plot\.png$
 ^Rplots\.pdf$
+^tests/testthat/Rplots\.pdf$
 ^Tech Report$
 ^huge_.*\.tar\.gz$
 ^\.pytest_cache$

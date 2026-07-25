@@ -1,6 +1,7 @@
 // Rcpp thin wrapper for MB graph estimation — delegates to huge::mb() / huge::mb_scr()
 #include <Rcpp.h>
 #include "huge/huge_core.h"
+#include "huge_r_threads.h"
 using namespace Rcpp;
 
 static void validate_lambda_dimensions(const NumericVector& lambda) {
@@ -54,6 +55,7 @@ List SPMBscr(NumericMatrix S, NumericVector lambda, int nlambda, int d, IntegerM
     if (idx_scr.nrow() != nscr || idx_scr.ncol() != d)
         stop("idx_scr must be an nscr by d matrix.");
 
+    huge::RThreadLimitGuard thread_limit;
     huge::MBResult res = huge::mb_scr(S.begin(), d, lambda.begin(), nlambda,
                                       idx_scr.begin(), nscr);
     return mb_result_to_list(res, d);
@@ -72,6 +74,7 @@ List SPMBgraph(NumericMatrix S, NumericVector lambda, int nlambda, int d)
     if (lambda.size() != nlambda)
         stop("lambda length must equal nlambda.");
 
+    huge::RThreadLimitGuard thread_limit;
     huge::MBResult res = huge::mb(S.begin(), d, lambda.begin(), nlambda);
     return mb_result_to_list(res, d);
 }

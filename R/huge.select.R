@@ -20,8 +20,8 @@
 #' @param stars.thresh The variability threshold in stars. The default value is \code{0.1}. An alternative value is \code{0.05}. Only applicable when \code{criterion = "stars"}.
 #' @param stars.subsample.ratio The subsampling ratio. The default value is \code{10*sqrt(n)/n} when \code{n>144} and \code{0.8} when \code{n<=144}, where \code{n} is the sample size. Only applicable when \code{criterion = "stars"}.
 #' @param rep.num The number of subsamplings when \code{criterion = "stars"} or rotations when \code{criterion = "ric"}. The default value is \code{20}. NOT applicable when \code{criterion = "ebic"}.
-#' @param num.cores The number of CPU cores used to fit the stars subsamplings in parallel via \code{parallel::mclapply}. The default value is \code{1} (serial). Values greater than 1 use process forking and are ignored on Windows. Each worker may also start OpenMP or BLAS threads, so \code{num.cores = 1} is the portable choice when a bounded thread budget or fork safety matters. Results are identical to the serial path for the same random seed. Only applicable when \code{criterion = "stars"}.
 #' @param verbose If \code{verbose = FALSE}, tracing information printing is disabled. The default value is \code{TRUE}.
+#' @param num.cores The number of CPU cores used to fit the stars subsamplings in parallel via \code{parallel::mclapply}. The default value is \code{1} (serial). At most two forked workers are used, and this argument is ignored on Windows. Each forked worker limits huge's native OpenMP code to one thread, but an external threaded BLAS may still create additional threads; \code{num.cores = 1} is the portable choice when a bounded thread budget or fork safety matters. Results are identical to the serial path for the same random seed. Only applicable when \code{criterion = "stars"}.
 #' @return
 #' An object with S3 class "select" is returned:
 #'   \item{refit}{
@@ -75,7 +75,7 @@
 #' out.select = huge.select(out.glasso,criterion = "ebic")
 #' plot(out.select)
 #' @export
-huge.select = function(est, criterion = NULL, ebic.gamma = 0.5, stars.thresh = 0.1, stars.subsample.ratio = NULL, rep.num = 20, num.cores = 1, verbose = TRUE){
+huge.select = function(est, criterion = NULL, ebic.gamma = 0.5, stars.thresh = 0.1, stars.subsample.ratio = NULL, rep.num = 20, verbose = TRUE, num.cores = 1){
 
   if(!is.list(est) || !inherits(est, "huge"))
     stop("est must be an object returned by huge().")
@@ -177,12 +177,12 @@ huge.select = function(est, criterion = NULL, ebic.gamma = 0.5, stars.thresh = 0
     if(criterion == "stars" && d < 2)
       stop("StARS requires at least two variables.")
     if(criterion == "stars" && .Platform$OS.type != "windows" &&
-       min(num.cores, rep.num) > 1)
+       min(num.cores, rep.num, 2L) > 1)
       warning(paste(
-        "num.cores > 1 uses forked StARS workers, and each fit may also",
-        "start OpenMP or BLAS threads; this can oversubscribe CPUs or be",
-        "unsafe with some forked runtimes. Use num.cores = 1 for the",
-        "portable single-worker path."
+        "num.cores > 1 uses at most two forked StARS workers. Each worker",
+        "limits huge's native OpenMP code to one thread, but an external",
+        "threaded BLAS may still create additional threads. Use",
+        "num.cores = 1 for the portable single-worker path."
       ), call. = FALSE)
 
     n = nrow(est$data)
@@ -349,10 +349,25 @@ huge.select = function(est, criterion = NULL, ebic.gamma = 0.5, stars.thresh = 0
       subsample.fit = function(ind.sample)
         refit.fn(est$data[ind.sample,], est$lambda)$path
 
+      # This wrapper runs only in fork children. The native R adapter reads
+      # the private marker and temporarily limits huge's OpenMP regions to
+      # one thread, avoiding nested package-owned parallelism.
+      subsample.fit.fork = function(ind.sample) {
+        previous = Sys.getenv("HUGE_R_FORK_WORKER", unset = NA_character_)
+        on.exit({
+          if(is.na(previous))
+            Sys.unsetenv("HUGE_R_FORK_WORKER")
+          else
+            Sys.setenv(HUGE_R_FORK_WORKER = previous)
+        }, add = TRUE)
+        Sys.setenv(HUGE_R_FORK_WORKER = "1")
+        subsample.fit(ind.sample)
+      }
+
       # Fork-based parallelism (not on Windows); never start more workers
-      # than there are independent subsample fits. num.cores = 1 keeps the
-      # serial path with per-replication progress output.
-      use.cores = min(num.cores, rep.num)
+      # than there are independent subsample fits or CRAN's two-core limit.
+      # num.cores = 1 keeps the serial path with per-replication progress.
+      use.cores = min(num.cores, rep.num, 2L)
       if(.Platform$OS.type == "windows") use.cores = 1
 
       est$merge = vector("list", nlambda)
@@ -366,7 +381,7 @@ huge.select = function(est, criterion = NULL, ebic.gamma = 0.5, stars.thresh = 0
           flush.console()
         }
         paths = parallel::mclapply(
-          ind.list, subsample.fit, mc.cores = use.cores,
+          ind.list, subsample.fit.fork, mc.cores = use.cores,
           mc.cleanup = TRUE, mc.allow.recursive = FALSE
         )
         failed = vapply(paths, function(p) inherits(p, "try-error") || is.null(p), logical(1))

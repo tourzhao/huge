@@ -44,11 +44,15 @@ static void collect_sorted(ColResult& col, int lambda_idx, int d,
 // Glasso: inner coordinate-descent solver
 // =========================================================================
 
+static constexpr double GLASSO_DEFAULT_CONVERGENCE_TOL = 1e-4;
+static constexpr double GLASSO_REFINEMENT_CONVERGENCE_TOL = 1e-8;
+
 static void glasso_sub(Matrix& S, Matrix& W, Matrix& T, int d,
-                       double ilambda, int& df, bool scr, bool& hit_max_iter)
+                       double ilambda, int& df, bool scr, bool& hit_max_iter,
+                       double convergence_tolerance)
 {
-    const double thol_act = 1e-4;
-    const double thol_ext = 1e-4;
+    const double thol_act = convergence_tolerance;
+    const double thol_ext = convergence_tolerance;
     const int MAX_ITER_EXT = 100;
     const int MAX_ITER_INT = 10000;
     const int MAX_ITER_ACT = 10000;
@@ -288,6 +292,8 @@ static double inverse_residual_inf(const Matrix& covariance,
 }
 
 static constexpr double GLASSO_INVERSE_RESIDUAL_TOL = 1e-2;
+static constexpr double GLASSO_REFINEMENT_RESIDUAL_TRIGGER =
+    0.5 * GLASSO_INVERSE_RESIDUAL_TOL;
 
 // trace(A*B) = sum_k dot(A[:,k], B[k,:]).  B is symmetric here (sub_S), so
 // B[k,:] == B[:,k] and both dot operands are contiguous columns — bitwise
@@ -305,6 +311,16 @@ static bool matrix_is_finite(const Matrix& matrix) {
         matrix.v.begin(), matrix.v.end(),
         [](double value) { return std::isfinite(value); }
     );
+}
+
+static void symmetrize_square_in_place(Matrix& matrix) {
+    for (int i = 0; i < matrix.rows; i++) {
+        for (int j = i + 1; j < matrix.cols; j++) {
+            double average = 0.5 * matrix(i, j) + 0.5 * matrix(j, i);
+            matrix(i, j) = average;
+            matrix(j, i) = average;
+        }
+    }
 }
 
 static void validate_regularization_inputs(const double* matrix, int d,
@@ -481,35 +497,75 @@ static GlassoResult glasso_impl(const double* S_data, int d,
                 }
             }
             int solver_directed_df = 0;
+            bool component_hit_max_iter = false;
             glasso_sub(sub_S, sub_W, sub_T, q, lambda_i,
                        solver_directed_df, scr,
-                       res.hit_max_iter);
+                       component_hit_max_iter,
+                       GLASSO_DEFAULT_CONVERGENCE_TOL);
+            double raw_inverse_residual =
+                inverse_residual_inf(sub_W, sub_T);
 
             // Column-wise coordinate solves are only approximately symmetric
             // at finite tolerance. Project onto the symmetric matrices before
             // exposing the precision estimate, deriving its graph, computing
             // likelihood metadata, or using it as the next warm start.
+            symmetrize_square_in_place(sub_T);
+            double projected_ldet = spd_log_det_colmajor(sub_T);
+            double projected_residual =
+                inverse_residual_inf(sub_W, sub_T);
+
+            // Symmetrization can amplify the inverse residual of a column-wise
+            // solution. Refine a finite SPD candidate once at a tighter
+            // tolerance, including a useful iterate that reached the first
+            // solve's limit; the independent checks below still reject an
+            // inconsistent refined result.
+            if (matrix_is_finite(sub_T) && matrix_is_finite(sub_W)) {
+                if (std::isfinite(projected_ldet) &&
+                        std::isfinite(projected_residual) &&
+                        std::isfinite(raw_inverse_residual) &&
+                        (projected_residual >
+                             GLASSO_REFINEMENT_RESIDUAL_TRIGGER ||
+                         raw_inverse_residual >
+                             GLASSO_INVERSE_RESIDUAL_TOL)) {
+                    bool refinement_hit_max_iter = false;
+                    solver_directed_df = 0;
+                    glasso_sub(
+                        sub_S, sub_W, sub_T, q, lambda_i,
+                        solver_directed_df, scr, refinement_hit_max_iter,
+                        GLASSO_REFINEMENT_CONVERGENCE_TOL
+                    );
+                    component_hit_max_iter =
+                        component_hit_max_iter || refinement_hit_max_iter;
+                    raw_inverse_residual =
+                        inverse_residual_inf(sub_W, sub_T);
+                    symmetrize_square_in_place(sub_T);
+                    projected_ldet = spd_log_det_colmajor(sub_T);
+                    projected_residual =
+                        inverse_residual_inf(sub_W, sub_T);
+                }
+            }
+            res.hit_max_iter =
+                res.hit_max_iter || component_hit_max_iter;
+
             int component_edges = 0;
             for (int ii = 0; ii < q; ii++) {
                 for (int jj = ii + 1; jj < q; jj++) {
-                    double average =
-                        0.5 * sub_T(ii, jj) + 0.5 * sub_T(jj, ii);
-                    sub_T(ii, jj) = average;
-                    sub_T(jj, ii) = average;
-                    if (average != 0.0) component_edges++;
+                    if (sub_T(ii, jj) != 0.0) component_edges++;
                 }
             }
             total_edges += component_edges;
 
             if (!matrix_is_finite(sub_T) || !matrix_is_finite(sub_W))
                 throw std::runtime_error("glasso produced non-finite estimates.");
-            double ldet = spd_log_det_colmajor(sub_T);
-            if (!std::isfinite(ldet))
+            if (!std::isfinite(projected_ldet))
                 throw std::runtime_error(
                     "glasso produced a precision estimate that is not positive definite.");
-            double inverse_residual = inverse_residual_inf(sub_W, sub_T);
-            if (!std::isfinite(inverse_residual) ||
-                    inverse_residual > GLASSO_INVERSE_RESIDUAL_TOL)
+            if (!std::isfinite(raw_inverse_residual) ||
+                    raw_inverse_residual > GLASSO_INVERSE_RESIDUAL_TOL)
+                throw std::runtime_error(
+                    "glasso produced inconsistent precision and covariance estimates.");
+            if (!std::isfinite(projected_residual) ||
+                    projected_residual > GLASSO_INVERSE_RESIDUAL_TOL)
                 throw std::runtime_error(
                     "glasso produced inconsistent precision and covariance estimates.");
 
@@ -519,7 +575,7 @@ static GlassoResult glasso_impl(const double* S_data, int d,
                     (*cur_cov_ptr)(z[ii], z[jj]) = sub_W(ii, jj);
                 }
             }
-            total_ldet += ldet;
+            total_ldet += projected_ldet;
             total_tr += trace_matmul(sub_T, sub_S);
         }
 
