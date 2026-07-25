@@ -13,7 +13,7 @@ Authors@R: c(
     person("Tuo", "Zhao", role = c("aut", "cre"), email = "tourzhao@gatech.edu")
   )
 Maintainer: Tuo Zhao <tourzhao@gatech.edu>
-Depends: R (>= 3.0.0)
+Depends: R (>= 3.4.0)
 Imports:
     Matrix,
     igraph,
@@ -26,7 +26,7 @@ Imports:
     utils,
     Rcpp
 Suggests:
-    testthat (>= 3.0.0)
+    testthat (>= 3.1.7)
 LinkingTo:
     Rcpp
 Description: Provides a general framework for

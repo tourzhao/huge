@@ -148,7 +148,7 @@
 }
 
 .huge_validate_estimation_input = function(
-  x, input.type = "auto", prepare.covariance = TRUE
+  x, input.type = "auto", prepare.covariance = TRUE, require.psd = TRUE
 ) {
   if(!is.matrix(x) || !is.numeric(x))
     stop("x must be a numeric matrix.")
@@ -205,7 +205,8 @@
         }
       }
     }
-    .huge_validate_correlation_psd(correlation)
+    if(require.psd)
+      .huge_validate_correlation_psd(correlation)
   }
   else if(!cov.input)
   {
@@ -303,7 +304,10 @@
   cummin(lambda)
 }
 
-.huge_default_lambda = function(S, d, nlambda = NULL, lambda.min.ratio = NULL, lambda = NULL) {
+.huge_default_lambda = function(
+  S, d, nlambda = NULL, lambda.min.ratio = NULL, lambda = NULL,
+  legacy.glasso.covariance = FALSE
+) {
   if(!is.null(lambda)) {
     lambda = .huge_validate_lambda(lambda)
     if(length(lambda) > 1L &&
@@ -318,9 +322,13 @@
   else nlambda = .huge_validate_positive_integer(nlambda, "nlambda")
   if(is.null(lambda.min.ratio)) lambda.min.ratio = 0.1
   else lambda.min.ratio = .huge_validate_ratio(lambda.min.ratio)
-  offdiag = S
-  diag(offdiag) = 0
-  lambda.max = max(abs(offdiag))
+  if(legacy.glasso.covariance)
+    lambda.max = max(abs(S - diag(d)))
+  else {
+    offdiag = S
+    diag(offdiag) = 0
+    lambda.max = max(abs(offdiag))
+  }
   if(lambda.max == 0) lambda.max = 1e-3
   lambda = .huge_geometric_lambda(
     lambda.max, lambda.min.ratio, nlambda

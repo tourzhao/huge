@@ -160,7 +160,8 @@ test_that("glasso default lambda ignores covariance diagonal scale", {
   expected.identity <- c(1e-3, sqrt(1e-7), 1e-4)
   diagonal <- diag(c(100, 3, .5, 8))
   diagonal.fit <- huge.glasso(
-    diagonal, nlambda = 3, lambda.min.ratio = .1, verbose = FALSE
+    diagonal, nlambda = 3, lambda.min.ratio = .1, verbose = FALSE,
+    input.type = "covariance"
   )
 
   expect_equal(diagonal.fit$lambda, expected.identity, tolerance = 1e-15)
@@ -178,7 +179,8 @@ test_that("glasso default lambda ignores covariance diagonal scale", {
     nrow = 3
   )
   covariance.fit <- huge.glasso(
-    S, nlambda = 3, lambda.min.ratio = .25, verbose = FALSE
+    S, nlambda = 3, lambda.min.ratio = .25, verbose = FALSE,
+    input.type = "covariance"
   )
   expect_equal(covariance.fit$lambda, c(.6, .3, .15),
                tolerance = 1e-15)
@@ -186,7 +188,8 @@ test_that("glasso default lambda ignores covariance diagonal scale", {
   weak <- diag(3)
   weak[1, 2] <- weak[2, 1] <- 1e-6
   weak.fit <- huge.glasso(
-    weak, nlambda = 2, lambda.min.ratio = .1, verbose = FALSE
+    weak, nlambda = 2, lambda.min.ratio = .1, verbose = FALSE,
+    input.type = "covariance"
   )
   expect_equal(weak.fit$lambda, c(1e-6, 1e-7), tolerance = 1e-20)
 
@@ -195,6 +198,33 @@ test_that("glasso default lambda ignores covariance diagonal scale", {
     huge.glasso(S, lambda = explicit, verbose = FALSE)$lambda,
     explicit
   )
+})
+
+test_that("glasso auto covariance keeps its historical default lambda scale", {
+  covariance <- matrix(c(.001, .002, .002, .02), nrow = 2)
+  legacy.max <- max(abs(covariance - diag(2)))
+
+  automatic <- huge.glasso(
+    covariance, nlambda = 2, lambda.min.ratio = .1, verbose = FALSE
+  )
+  named.automatic <- huge.glasso(
+    covariance, nlambda = 2, lambda.min.ratio = .1, verbose = FALSE,
+    input.type = c(route = "auto")
+  )
+  attributed.automatic <- huge.glasso(
+    covariance, nlambda = 2, lambda.min.ratio = .1, verbose = FALSE,
+    input.type = structure("auto", class = "AsIs")
+  )
+  explicit <- huge.glasso(
+    covariance, nlambda = 2, lambda.min.ratio = .1, verbose = FALSE,
+    input.type = "covariance"
+  )
+
+  expect_equal(automatic$lambda, c(legacy.max, .1 * legacy.max),
+               tolerance = 1e-15)
+  expect_identical(named.automatic$lambda, automatic$lambda)
+  expect_identical(attributed.automatic$lambda, automatic$lambda)
+  expect_equal(explicit$lambda, c(.002, .0002), tolerance = 1e-15)
 })
 
 test_that("glasso raw-data default lambda remains correlation based", {
@@ -212,7 +242,7 @@ test_that("glasso raw-data default lambda remains correlation based", {
   expect_equal(fit$lambda, expected, tolerance = 1e-12)
 })
 
-test_that("glasso rejects uncertified covariance and precision pairs", {
+test_that("glasso refines symmetric precision and rejects non-SPD paths", {
   rho <- 0.9999
   covariance <- matrix(rho, 3, 3)
   diag(covariance) <- 1
@@ -225,14 +255,72 @@ test_that("glasso rejects uncertified covariance and precision pairs", {
       ),
       "not positive definite"
     )
-    expect_error(
-      huge.glasso(
-        covariance, lambda = 0.01,
-        cov.output = cov.output, verbose = FALSE
-      ),
-      "inconsistent precision and covariance"
-    )
   }
+
+  fit <- huge.glasso(
+    covariance, lambda = 0.01, cov.output = TRUE, verbose = FALSE
+  )
+  fit.no.cov <- huge.glasso(
+    covariance, lambda = 0.01, cov.output = FALSE, verbose = FALSE
+  )
+  precision <- fit$icov[[1]]
+  expect_identical(precision, t(precision))
+  expect_equal(fit.no.cov$icov[[1]], precision, tolerance = 1e-12)
+  expect_gt(determinant(precision, logarithm = TRUE)$sign, 0)
+  expect_true(
+    max(rowSums(abs(fit$cov[[1]] %*% precision - diag(3)))) <= 1e-2
+  )
+})
+
+test_that("glasso returns a coherent pair for ill-conditioned Toeplitz input", {
+  d <- 20
+  rho <- 0.99
+  covariance <- outer(
+    seq_len(d), seq_len(d), function(i, j) rho^abs(i - j)
+  )
+  fit <- huge.glasso(
+    covariance, lambda = 0.001, cov.output = TRUE, verbose = FALSE
+  )
+
+  precision <- fit$icov[[1]]
+  estimated.covariance <- fit$cov[[1]]
+  expect_identical(precision, t(precision))
+  expect_identical(estimated.covariance, t(estimated.covariance))
+  expect_gt(determinant(precision, logarithm = TRUE)$sign, 0)
+  expect_gt(determinant(estimated.covariance, logarithm = TRUE)$sign, 0)
+  expect_lte(
+    max(rowSums(abs(estimated.covariance %*% precision - diag(d)))),
+    1e-2
+  )
+})
+
+test_that("glasso refines a finite iteration-limit candidate", {
+  covariance <- matrix(c(
+    1.0000000000000002, .18009786022575919, -.10400558762095684,
+    .76774091516199638, .18742182119843603,
+    .18009786022575919, 1, .83834121674080364, .48252423066148048,
+    -.066223216563695037,
+    -.10400558762095684, .83834121674080364, 1, .097388083759665525,
+    -.56897959252915542,
+    .76774091516199638, .48252423066148048, .097388083759665525,
+    1.0000000000000002, .44589188604391788,
+    .18742182119843603, -.066223216563695037, -.56897959252915542,
+    .44589188604391788, .99999999999999989
+  ), nrow = 5, byrow = TRUE)
+
+  expect_warning(
+    fit <- huge.glasso(
+      covariance, lambda = .00083834121674080362,
+      cov.output = TRUE, verbose = FALSE,
+      input.type = "covariance"
+    ),
+    "iteration limit"
+  )
+  expect_gt(determinant(fit$icov[[1]], logarithm = TRUE)$sign, 0)
+  expect_lte(
+    max(rowSums(abs(fit$cov[[1]] %*% fit$icov[[1]] - diag(5)))),
+    1e-2
+  )
 })
 
 test_that("glasso works across graph types", {

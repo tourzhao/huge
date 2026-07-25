@@ -364,7 +364,9 @@ def _standardize(x: np.ndarray) -> np.ndarray:
     return centered
 
 
-def _cov_to_corr(cov: np.ndarray) -> np.ndarray:
+def _cov_to_corr(
+    cov: np.ndarray, *, require_psd: bool = True
+) -> np.ndarray:
     diagonal = np.diag(cov)
     if np.any(~np.isfinite(diagonal)) or np.any(diagonal <= 0.0):
         raise PyHugeError(
@@ -392,21 +394,22 @@ def _cov_to_corr(cov: np.ndarray) -> np.ndarray:
             corr[row, column] = value
             corr[column, row] = value
 
-    spectral_bound = max(1.0, float(np.linalg.norm(corr, ord=np.inf)))
-    tolerance = (
-        100.0
-        * np.finfo(float).eps
-        * max(1, dimension)
-        * spectral_bound
-    )
-    shifted = corr.copy()
-    shifted.flat[:: dimension + 1] += tolerance
-    try:
-        np.linalg.cholesky(shifted)
-    except np.linalg.LinAlgError as exc:
-        raise PyHugeError(
-            "Covariance input must be positive semidefinite."
-        ) from exc
+    if require_psd:
+        spectral_bound = max(1.0, float(np.linalg.norm(corr, ord=np.inf)))
+        tolerance = (
+            100.0
+            * np.finfo(float).eps
+            * max(1, dimension)
+            * spectral_bound
+        )
+        shifted = corr.copy()
+        shifted.flat[:: dimension + 1] += tolerance
+        try:
+            np.linalg.cholesky(shifted)
+        except np.linalg.LinAlgError as exc:
+            raise PyHugeError(
+                "Covariance input must be positive semidefinite."
+            ) from exc
     return corr
 
 
@@ -433,6 +436,7 @@ def _build_lambda_path(
     lambda_: Optional[LambdaInput],
     nlambda: Optional[int],
     lambda_min_ratio: Optional[float],
+    legacy_glasso_covariance: bool = False,
 ) -> np.ndarray:
     if lambda_ is not None:
         return _ensure_lambda_sequence(lambda_, allow_ties=True)
@@ -443,7 +447,12 @@ def _build_lambda_path(
         if lambda_min_ratio is None
         else _ensure_ratio("lambda_min_ratio", lambda_min_ratio)
     )
-    lam_max = _offdiag_abs_max(base_matrix)
+    if legacy_glasso_covariance:
+        legacy_matrix = base_matrix - np.eye(base_matrix.shape[0])
+        legacy_max = float(np.max(np.abs(legacy_matrix)))
+        lam_max = 1e-3 if legacy_max == 0.0 else legacy_max
+    else:
+        lam_max = _offdiag_abs_max(base_matrix)
     if ratio == 1.0:
         # Equal geomspace endpoints can wobble by one ulp and appear to
         # increase. Preserve the documented path length with exact ties.
@@ -875,9 +884,12 @@ def huge(
     Only the ``native`` backend is currently supported; ``verbose`` output
     is not yet implemented. ``input_type`` may be ``"auto"``, ``"data"``,
     or ``"covariance"``; use ``"data"`` when observations form a square
-    symmetric matrix. The automatic ``ct`` path uses undirected edge weights
-    and a literal strict threshold; tied weights are never split, and reusing
-    ``lambda_path`` reconstructs the same graphs.
+    symmetric matrix. For glasso covariance input with no explicit lambda,
+    ``"auto"`` matches R's historical diagonal-sensitive lambda scale;
+    ``"covariance"`` uses only off-diagonal entries. The automatic ``ct``
+    path uses undirected edge weights and a literal strict threshold; tied
+    weights are never split, and reusing ``lambda_path`` reconstructs the
+    same graphs.
     """
     _ensure_backend_native(backend)
 
@@ -970,7 +982,7 @@ def huge(
         cov_mat[different] = (
             0.5 * x[different] + 0.5 * transpose[different]
         )
-        corr = _cov_to_corr(cov_mat)
+        corr = _cov_to_corr(cov_mat, require_psd=method != "glasso")
 
     if cov_input:
         assert cov_mat is not None and corr is not None
@@ -1026,6 +1038,11 @@ def huge(
         lambda_=lambda_,
         nlambda=nlambda,
         lambda_min_ratio=lambda_min_ratio,
+        legacy_glasso_covariance=(
+            method == "glasso"
+            and cov_input
+            and input_type == "auto"
+        ),
     )
 
     if method == "glasso":

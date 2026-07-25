@@ -26,11 +26,16 @@ Native graph path estimation entry.
 
 ## Key arguments
 
-- `x`: 2D numeric matrix (`n_samples x n_features`) or a square, positive
-  semidefinite covariance input with positive diagonal
+- `x`: 2D numeric matrix (`n_samples x n_features`) or a square covariance
+  input with positive diagonal and valid pairwise correlations. CT and TIGER
+  require positive semidefiniteness. Glasso may accept an indefinite pairwise
+  estimate only when regularization produces a certified positive-definite
+  result
 - `input_type`: `"auto"` keeps symmetry-based detection; `"data"` forces an
   observation matrix; `"covariance"` requires a square covariance/correlation
-  matrix. Set `"data"` for square symmetric observations
+  matrix. Set `"data"` for square symmetric observations. For glasso with no
+  explicit lambda, `"auto"` matches R's historical diagonal-sensitive default
+  scale, while `"covariance"` uses only off-diagonal entries
 - `method`: one of `"mb"`, `"glasso"`, `"ct"`, `"tiger"`
 - `lambda_`: optional numeric scalar, NumPy 0-D value, or non-empty
   one-dimensional sequence; multidimensional inputs are rejected. MB, glasso,

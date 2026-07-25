@@ -7,14 +7,18 @@
   raw-data routing. TIGER now sends the original matrix and resolved flag
   directly to C++, where covariance validation, correlation construction,
   automatic lambda selection, and fitting use one native correlation matrix.
+  For compatibility with existing glasso callers, auto-detected covariance
+  input retains its historical diagonal-sensitive default lambda scale;
+  explicit covariance routing uses the corrected off-diagonal scale.
 * Python MB and TIGER now consume the core's compressed column support
   directly instead of materializing and discarding an
   `nlambda * d * d` dense coefficient cube. The private native entries retain
   their default dense output for compatibility. RIC also limits its OpenMP
   team to the number of requested rotations, preventing idle workers from
-  each allocating a `d * d` scratch matrix. StARS similarly caps forked
-  workers at the number of requested subsamples and disables recursive
-  `mclapply` for its worker fits.
+  each allocating a `d * d` scratch matrix. R StARS uses at most two forked
+  workers, limits huge's native OpenMP code to one thread in each child,
+  disables recursive `mclapply`, and retains the historical positional
+  `verbose` argument.
 * Repaired the standalone CMake package: it now finds and exports BLAS,
   installs the real public headers and package configuration, respects the
   OpenMP option at link time, and has static/shared installed-consumer smoke
@@ -71,7 +75,8 @@
   estimates without an absolute pivot cutoff. The shared core also rejects
   non-finite results and covariance/precision pairs whose inverse residual is
   too large before they can be reused as a warm start or returned through R
-  or Python.
+  or Python. Components whose symmetric projection loses inverse consistency
+  receive one tighter solve before final certification.
 * Fixed Python raw one-variable inputs being collapsed to a scalar correlation
   by NumPy. CT, MB, glasso, and TIGER now return well-formed `1 x 1` paths for
   valid single-variable observations. Raw inputs with only one observation or
@@ -110,11 +115,14 @@
   before CT, MB, or glasso uses them, preventing one-sided threshold graphs.
   TIGER still passes the original validated matrix to C++, where symmetric
   correlation construction and automatic lambda selection remain.
-* Covariance validation now also requires the whole matrix to be positive
-  semidefinite instead of checking only pairwise Cauchy--Schwarz bounds.
-  Singular covariance matrices remain valid within a scale-aware roundoff
-  tolerance. TIGER repeats this check in C++ before native correlation,
-  automatic lambda selection, and fitting.
+* Covariance validation for CT, MB, and TIGER now also requires the whole
+  matrix to be positive semidefinite instead of checking only pairwise
+  Cauchy--Schwarz bounds. Singular covariance matrices remain valid within a
+  scale-aware roundoff tolerance. TIGER repeats this check in C++ before
+  native correlation, automatic lambda selection, and fitting. Glasso still
+  accepts indefinite pairwise covariance estimates, but returns them only
+  when regularization produces a finite, positive-definite precision estimate
+  and a certified covariance/precision pair.
 * TIGER's C++ covariance symmetrization no longer adds two large finite
   entries before scaling. Valid covariance matrices near the floating-point
   maximum now reach native correlation construction and lambda selection
@@ -232,10 +240,11 @@
   silently returning partially converged estimates (new `hit_max_iter`
   channel from the shared C++ core).
 * Added `huge.select(..., num.cores = k)`: StARS subsamplings can now fit in
-  parallel via `parallel::mclapply` (about 3x with 8 cores at d = 1000);
-  workers are capped at the number of subsamples and results are identical to
-  the serial path. Parallel calls now warn that forked workers can multiply
-  native OpenMP/BLAS threads. New Imports: parallel.
+  parallel via `parallel::mclapply`. The R interface starts at most two forked
+  workers, limits huge's package-owned OpenMP regions to one thread in each
+  child, and returns results identical to the serial path. External BLAS
+  thread settings remain controlled by the R installation. New Imports:
+  parallel.
 * Speedups: RIC selection now uses BLAS matrix products (about 10-20x);
   mb adds a sequential strong screening rule with full KKT certification
   (about 1.2x, and estimates now satisfy exact KKT);

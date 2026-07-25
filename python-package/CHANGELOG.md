@@ -50,9 +50,11 @@
   The projection now averages half-scaled entries so large finite precision
   values do not overflow during symmetrization. Log-determinant evaluation no
   longer treats a fixed `1e-15` pivot as singular, so valid rescaled problems
-  retain finite likelihoods. Truly unrepresentable precision, internal
-  covariance, or log-likelihood results now fail before they can become a warm
-  start or escape either language binding.
+  retain finite likelihoods. Covariance/precision pairs are certified by
+  their inverse residual, with one tighter conditional solve when projection
+  loses consistency. Truly unrepresentable or inconsistent precision,
+  internal covariance, or log-likelihood results now fail before they can
+  become a warm start or escape either language binding.
 - Fixed raw one-variable inputs being collapsed to a scalar correlation by
   NumPy. CT, MB, glasso, and TIGER now return well-formed `1 x 1` paths for
   valid single-variable observations. Raw inputs with only one observation or
@@ -69,10 +71,13 @@
   pairwise Cauchy--Schwarz violation are now rejected explicitly; only tiny
   correlation roundoff is clipped back to `[-1, 1]`. Symmetrization now adds
   half-scaled matrices, avoiding intermediate overflow for large finite input.
-- Covariance input must now be positive semidefinite, not merely satisfy every
-  pairwise Cauchy--Schwarz bound. A scale-aware roundoff tolerance preserves
-  singular sample covariance matrices; TIGER enforces the same rule in the
-  shared C++ core before native lambda selection and fitting.
+- Covariance input for CT and TIGER must now be positive semidefinite, not
+  merely satisfy every pairwise Cauchy--Schwarz bound. A scale-aware roundoff
+  tolerance preserves singular sample covariance matrices; TIGER enforces the
+  same rule in the shared C++ core before native lambda selection and fitting.
+  Glasso accepts indefinite pairwise covariance estimates only when
+  regularization produces a finite positive-definite precision estimate and a
+  certified covariance/precision pair.
 - TIGER covariance symmetrization now avoids adding two large finite entries
   before scaling. Valid covariance matrices near the floating-point maximum
   no longer overflow during native correlation construction.
@@ -102,6 +107,10 @@
   off-diagonal value below `1e-3` with `1e-3`. The fallback is now used only
   when no off-diagonal signal exists, matching R; TIGER lambda selection
   remains in the shared C++ core.
+- Auto-detected glasso covariance input now matches R's historical
+  diagonal-sensitive default lambda scale for cross-language compatibility. Set
+  `input_type="covariance"` to use the corrected off-diagonal scale; explicit
+  lambda paths and raw-data fits are unchanged.
 - Fixed MB and glasso rejecting the documented `lambda_min_ratio=1` boundary.
   Automatic grids now contain the requested number of exact tied values, and
   explicit non-increasing paths may also contain ties so StARS can refit them;

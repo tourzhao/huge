@@ -1,6 +1,7 @@
 // Rcpp thin wrapper for TIGER estimation — delegates to huge::tiger()
 #include <Rcpp.h>
 #include "huge/huge_core.h"
+#include "huge_r_threads.h"
 using namespace Rcpp;
 
 static void validate_lambda_dimensions(const NumericVector& lambda) {
@@ -68,6 +69,7 @@ List SPMBgraphsqrt(NumericMatrix data, NumericVector lambda, int nlambda, int d)
     if (lambda.size() != nlambda)
         stop("tiger lambda length must match nlambda.");
 
+    huge::RThreadLimitGuard thread_limit;
     huge::TigerResult res = huge::tiger(data.begin(), n, d, lambda.begin(), nlambda);
     return tiger_result_to_list(res, d);
 }
@@ -93,6 +95,7 @@ List SPMBgraphsqrtFit(NumericMatrix input, Nullable<NumericVector> lambda,
         lambda_ptr = supplied_lambda.data();
     }
 
+    huge::RThreadLimitGuard thread_limit;
     huge::TigerResult res = huge::tiger_fit(
         input.begin(), n, d, covariance_input, lambda_ptr, nlambda,
         lambda_min_ratio);
