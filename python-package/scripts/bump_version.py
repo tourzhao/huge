@@ -10,9 +10,34 @@ import sys
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+REPOSITORY_ROOT = ROOT.parent
 PYPROJECT = ROOT / "pyproject.toml"
 INIT_PY = ROOT / "pyhuge" / "__init__.py"
 CHANGELOG = ROOT / "CHANGELOG.md"
+
+# Release contracts (tests/test_packaging_contract.py, tests/test_cmake_contract.py)
+# require the R package, the Python package, the standalone CMake project, and
+# the documented release commands to agree. Keep every one of those in sync
+# here; a missed file fails the contract tests rather than shipping a mismatch.
+# The R DESCRIPTION and configure(.ac) are updated by the R-side release step.
+SHARED_VERSION_PATTERNS: tuple[tuple[str, str], ...] = (
+    ("CMakeLists.txt", r"(^project\(huge VERSION )(\d+\.\d+\.\d+)"),
+    (
+        "tools/cmake-consumer/CMakeLists.txt",
+        r"(^find_package\(huge )(\d+\.\d+\.\d+)( CONFIG REQUIRED\))",
+    ),
+    ("python-package/README.md", r"((?:bump_version\.py|release\.sh) )(\d+\.\d+\.\d+)"),
+    ("python-package/CONTRIBUTING.md", r"((?:bump_version\.py|release\.sh) )(\d+\.\d+\.\d+)"),
+    ("python-package/docs/contributing.md", r"((?:bump_version\.py|release\.sh) )(\d+\.\d+\.\d+)"),
+    ("python-package/docs/release.md", r"((?:bump_version\.py|release\.sh) )(\d+\.\d+\.\d+)"),
+    ("python-package/docs/release.md", r"(pyhuge: release )(\d+\.\d+\.\d+)"),
+    ("python-package/docs/release.md", r"(pyhuge-v)(\d+\.\d+\.\d+)"),
+    ("python-package/scripts/release.sh", r"(Example: \$0 )(\d+\.\d+\.\d+)"),
+    (
+        "python-package/tests/test_packaging_contract.py",
+        r"(^    expected = \")(\d+\.\d+\.\d+)(\")",
+    ),
+)
 
 
 def _validate_version(version: str) -> None:
@@ -66,11 +91,36 @@ def main() -> int:
         print("error: failed to update version fields.", file=sys.stderr)
         return 1
 
+    updated = [PYPROJECT, INIT_PY]
+    missed = []
+    for relative_path, pattern in SHARED_VERSION_PATTERNS:
+        path = REPOSITORY_ROOT / relative_path
+        if not path.exists():
+            missed.append(relative_path)
+            continue
+        # Group 1 is the literal prefix, group 2 the version; an optional
+        # group 3 is a literal suffix that must be preserved.
+        replacement = rf"\g<1>{args.version}"
+        if re.compile(pattern).groups >= 3:
+            replacement += r"\g<3>"
+        if _replace_regex(path, pattern, replacement):
+            if path not in updated:
+                updated.append(path)
+        else:
+            missed.append(relative_path)
+
+    if missed:
+        print(
+            "error: no version match in: " + ", ".join(sorted(set(missed))),
+            file=sys.stderr,
+        )
+        return 1
+
     _ensure_changelog_heading(args.version)
+    updated.append(CHANGELOG)
     print(f"Updated version to {args.version}")
-    print(f"- {PYPROJECT}")
-    print(f"- {INIT_PY}")
-    print(f"- {CHANGELOG}")
+    for path in updated:
+        print(f"- {path}")
     return 0
 
 

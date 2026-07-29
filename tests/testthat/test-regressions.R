@@ -355,3 +355,108 @@ test_that("ROC AUC is invariant to equal-FPR order and duplicates", {
 
   expect_equal(auc, rep(.75, 3))
 })
+
+test_that("RIC certifies numerical zeros regardless of summation order (2.0.1: ATLAS)", {
+  # The rotated inner products below are mathematically zero, so RIC's optimum
+  # is exactly zero.  A conforming BLAS may return any value inside the dot
+  # product's roundoff interval, and an optimized one (ATLAS) does: 2.0.0
+  # returned a tiny positive lambda here, which bypassed the zero-lambda
+  # fallback and made glasso fit singular data almost unregularized.
+  # A cyclic shift relabels which rotation index sees which pairing without
+  # changing the multiset of rotated inner products, so the certified optimum
+  # must not move.  (An arbitrary permutation is not a valid probe here: it
+  # changes which cyclic rotations exist, and therefore the true optimum.)
+  x = cbind(c(-1, -1, 1, 1), c(-1, -1, 1, 1))
+  shifts = list(1:4, c(2, 3, 4, 1), c(3, 4, 1, 2), c(4, 1, 2, 3))
+
+  for(shift in shifts) {
+    fit = huge(x[shift, ], method = "ct", lambda = 1, verbose = FALSE)
+    selected = huge.select(
+      fit, criterion = "ric", rep.num = 4, verbose = FALSE
+    )
+    expect_identical(selected$opt.lambda, 0, info = paste(shift, collapse = ""))
+  }
+
+  # Scaling permutes nothing but changes every rounding: still exactly zero.
+  for(factor in c(1, 8, 1 / 1024, 1e6)) {
+    fit = huge(x * factor, method = "ct", lambda = 1, verbose = FALSE)
+    selected = huge.select(
+      fit, criterion = "ric", rep.num = 4, verbose = FALSE
+    )
+    expect_identical(selected$opt.lambda, 0, info = format(factor))
+  }
+})
+
+test_that("RIC keeps correlations that working precision can represent", {
+  # Guards the other side of the certification bound: the fix must not become
+  # a fixed tolerance that erases weak-but-real structure.
+  #
+  # This case is built to sit just above the bound, which is the only way to
+  # show the bound is not over-aggressive.  For an input where some rotation
+  # gives an exact zero, RIC's optimum is 0 whatever the tolerance is, so such
+  # inputs cannot discriminate.  Here every cyclic rotation is nonzero and the
+  # smallest is driven to a chosen multiple of the bound: `t` scales the
+  # component of the second column along the rotation that would otherwise
+  # vanish, so min |C[1,2]| lands at roughly 24x and 2.4x the bound.
+  n = 5
+  ramp = c(-1, -.5, 0, .5, 1)
+  ramp = (ramp - mean(ramp)) / sd(ramp)
+  rotate = function(v, r) v[((seq_along(v) - 1 + r) %% length(v)) + 1]
+  set.seed(3)
+  offset = rnorm(n)
+  direction = rnorm(n)
+  # Remove the rotation-0 component, so `t` alone sets the smallest rotation.
+  base = offset - (sum(ramp * offset) / sum(ramp * direction)) * direction
+  for(t in c(1e-13, 1e-14)) {
+    x = cbind(ramp, base + t * direction)
+    fit = huge(x, method = "ct", lambda = .5, verbose = FALSE)
+    selected = huge.select(
+      fit, criterion = "ric", rep.num = n, verbose = FALSE
+    )
+    expect_gt(selected$opt.lambda, 0)
+  }
+
+  # Weak-but-representable structure on top of an orthogonal column.
+  first = c(-1, -1, 1, 1)
+  orthogonal = c(-1, 1, -1, 1)
+  for(strength in c(1e-3, 1e-6, 1e-9)) {
+    x = cbind(first, orthogonal + strength * first)
+    fit = huge(x, method = "ct", lambda = .5, verbose = FALSE)
+    selected = huge.select(
+      fit, criterion = "ric", rep.num = 4, verbose = FALSE
+    )
+    expect_equal(sum(selected$refit), 2, info = format(strength))
+  }
+
+  set.seed(404)
+  L = huge.generator(n = 100, d = 30, graph = "hub", verbose = FALSE)
+  for(method in c("mb", "glasso", "tiger", "ct")) {
+    fit = huge(L$data, method = method, nlambda = 6, verbose = FALSE)
+    set.seed(11)
+    selected = huge.select(fit, criterion = "ric", verbose = FALSE)
+    expect_gt(selected$opt.lambda, 0)
+    expect_true(is.finite(selected$opt.sparsity), info = method)
+  }
+})
+
+test_that("RIC zero routing does not depend on a bitwise-zero lambda", {
+  # 2.0.0 gated the safe refit on `opt.lambda == 0`, so a residual too small
+  # for glasso to certify but not bitwise zero reached the solver and raised
+  # an uncaught error.  Route on the roundoff scale instead: any lambda the
+  # solver cannot certify must fall back to the fitted path with a warning.
+  x = cbind(c(-1, -1, 1, 1), c(-1, -1, 1, 1))
+  for(method in c("glasso", "tiger")) {
+    fit = huge(x, method = method, lambda = 1, verbose = FALSE)
+    selected = expect_warning(
+      huge.select(fit, criterion = "ric", rep.num = 4, verbose = FALSE),
+      "RIC selected lambda = 0.*original fitted path",
+      info = method
+    )
+    expect_identical(selected$opt.lambda, 0, info = method)
+    expect_identical(
+      as.matrix(selected$refit),
+      as.matrix(fit$path[[which.min(abs(fit$lambda))]]),
+      info = method
+    )
+  }
+})

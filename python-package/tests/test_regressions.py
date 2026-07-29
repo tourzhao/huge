@@ -2762,3 +2762,99 @@ def test_solvers_are_silent_normally_and_glasso_rejects_uncertified_limit_case()
         PyHugeError, match="inconsistent precision and covariance"
     ):
         huge(xp, method="glasso", lambda_=[0.001], verbose=False)
+
+
+def test_ric_certifies_numerical_zeros_across_summation_orders():
+    """2.0.1: an optimized BLAS (ATLAS) returned a tiny positive RIC optimum.
+
+    The rotated inner products here are mathematically zero, so the optimum is
+    exactly zero. A conforming BLAS may return any value inside the dot
+    product's roundoff interval, so the certified optimum must be reproducible.
+    A cyclic shift relabels rotation indices without changing the multiset of
+    rotated inner products; an arbitrary permutation would change the true
+    optimum and is therefore not a valid probe.
+    """
+    column = np.asarray([-1.0, -1.0, 1.0, 1.0])
+    x = np.column_stack([column, column])
+    for shift in range(4):
+        rolled = np.roll(x, shift, axis=0)
+        fit = huge(rolled, method="ct", lambda_=[1.0], verbose=False)
+        selected = huge_select(
+            fit, criterion="ric", rep_num=4, verbose=False
+        )
+        assert selected.opt_lambda == 0.0
+
+    for factor in (1.0, 8.0, 1.0 / 1024.0, 1e6):
+        fit = huge(x * factor, method="ct", lambda_=[1.0], verbose=False)
+        selected = huge_select(
+            fit, criterion="ric", rep_num=4, verbose=False
+        )
+        assert selected.opt_lambda == 0.0
+
+
+def test_ric_keeps_representable_weak_correlations():
+    """The certification bound must not degrade into a fixed tolerance.
+
+    The first case is built to sit just above the bound, which is the only
+    way to show the bound is not over-aggressive. For an input where some
+    rotation gives an exact zero, RIC's optimum is 0 whatever the tolerance
+    is, so such inputs cannot discriminate. Here every cyclic rotation is
+    nonzero and the smallest is driven to a chosen multiple of the bound.
+    Mirrors test-regressions.R.
+    """
+    n = 5
+    ramp = np.asarray([-1.0, -0.5, 0.0, 0.5, 1.0])
+    ramp = (ramp - ramp.mean()) / ramp.std(ddof=1)
+    rng = np.random.default_rng(3)
+    offset = rng.normal(size=n)
+    direction = rng.normal(size=n)
+    # Remove the rotation-0 component, so ``t`` alone sets the smallest
+    # rotation.
+    base = offset - (ramp @ offset) / (ramp @ direction) * direction
+    for t in (1e-13, 1e-14):
+        x = np.column_stack([ramp, base + t * direction])
+        fit = huge(x, method="ct", lambda_=[0.5], verbose=False)
+        selected = huge_select(
+            fit, criterion="ric", rep_num=n, verbose=False
+        )
+        assert selected.opt_lambda > 0.0
+
+    first = np.asarray([-1.0, -1.0, 1.0, 1.0])
+    orthogonal = np.asarray([-1.0, 1.0, -1.0, 1.0])
+    for strength in (1e-3, 1e-6, 1e-9):
+        x = np.column_stack([first, orthogonal + strength * first])
+        fit = huge(x, method="ct", lambda_=[0.5], verbose=False)
+        selected = huge_select(
+            fit, criterion="ric", rep_num=4, verbose=False
+        )
+        assert selected.refit.sum() == pytest.approx(2.0)
+
+    rng = np.random.default_rng(404)
+    data = rng.normal(size=(100, 30))
+    for method in ("mb", "glasso", "tiger", "ct"):
+        fit = huge(data, method=method, nlambda=6, verbose=False)
+        selected = huge_select(fit, criterion="ric", verbose=False)
+        assert selected.opt_lambda > 0.0
+        assert np.isfinite(selected.opt_sparsity)
+
+
+def test_ric_zero_routing_is_not_gated_on_a_bitwise_zero():
+    """2.0.0 gated the safe refit on ``opt_lambda == 0``.
+
+    A residual too small for the solver to certify but not bitwise zero
+    reached the solver and raised an uncaught error. Routing now uses the
+    same roundoff scale, matching huge.select() in R.
+    """
+    column = np.asarray([-1.0, -1.0, 1.0, 1.0])
+    x = np.column_stack([column, column])
+    for method in ("glasso", "tiger"):
+        fit = huge(x, method=method, lambda_=[1.0], verbose=False)
+        with pytest.warns(RuntimeWarning, match="RIC selected lambda = 0"):
+            selected = huge_select(
+                fit, criterion="ric", rep_num=4, verbose=False
+            )
+        assert selected.opt_lambda == 0.0
+        nearest = int(np.argmin(np.abs(fit.lambda_path)))
+        assert np.array_equal(
+            selected.refit.toarray(), fit.path[nearest].toarray()
+        )

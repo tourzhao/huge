@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.18)
 project(huge_consumer LANGUAGES CXX)
 
-find_package(huge 2.0.0 CONFIG REQUIRED)
+find_package(huge 2.0.1 CONFIG REQUIRED)
 
 option(EXPECT_HUGE_OPENMP "Require the installed target to export OpenMP" OFF)
 get_target_property(huge_link_libraries huge::huge_core INTERFACE_LINK_LIBRARIES)

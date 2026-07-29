@@ -1361,9 +1361,18 @@ def huge_select(
                 )
 
             refit_lambda = opt_lambda
-            zero_proxy = opt_lambda == 0.0 and est.method != "ct"
+            # Route on "too small for the solver to certify", not on a bitwise
+            # zero.  A conforming BLAS may return any value inside the rotated
+            # inner product's roundoff interval, so RIC's optimum can be a
+            # tiny positive residual rather than exactly 0 (observed with
+            # ATLAS).  Comparing against the same roundoff scale keeps the
+            # fallback, and the selected graph, identical across BLAS
+            # implementations.  Mirrors huge.select() in R.
+            zero_proxy = (
+                opt_lambda <= max_offdiag * dot_gamma and est.method != "ct"
+            )
             if zero_proxy:
-                refit_lambda = float(np.finfo(float).tiny)
+                refit_lambda = max(opt_lambda, float(np.finfo(float).tiny))
 
             try:
                 refit_fit = huge(

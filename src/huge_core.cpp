@@ -1690,6 +1690,32 @@ double ric(const double* X_data, int n, int d, const int* r, int t)
 {
     if (d <= 1 || n <= 0 || t <= 0) return 0.0;
 
+    // Column 2-norms, used to certify numerical zeros below.  A rotation
+    // permutes rows, so the rotated column keeps its norm.
+    std::vector<double> col_norm(static_cast<size_t>(d));
+    for (int j = 0; j < d; j++)
+        col_norm[j] = std::sqrt(ddot_(&n, X_data + static_cast<size_t>(j) * n,
+                                     &BLAS_1,
+                                     X_data + static_cast<size_t>(j) * n,
+                                     &BLAS_1));
+
+    // Standard forward-error bound for a length-n dot product:
+    //   |computed - exact| <= gamma_n * sum_i |u_i v_i| <= gamma_n * ||u|| ||v||
+    // with gamma_n = n*eps / (1 - n*eps).  A BLAS is free to reassociate,
+    // vectorize, block, and use fused multiply-add, so a mathematically zero
+    // inner product may come back as a tiny nonzero value whose magnitude
+    // differs between implementations (this is exactly what ATLAS does on
+    // rank-deficient input).  Any |C[j,k]| within the pair's bound is
+    // therefore indistinguishable from zero and is certified to zero, which
+    // makes the selected lambda reproducible across BLAS implementations.
+    // The bound is pair-specific and scale-aware: it never erases a
+    // correlation that the working precision can actually represent.
+    const double eps = std::numeric_limits<double>::epsilon();
+    const double scaled_eps = static_cast<double>(n) * eps;
+    const double dot_gamma = scaled_eps < 1.0
+        ? scaled_eps / (1.0 - scaled_eps)
+        : std::numeric_limits<double>::infinity();
+
     double lambda_min = std::numeric_limits<double>::infinity();
 
     #ifdef _OPENMP
@@ -1721,12 +1747,17 @@ double ric(const double* X_data, int n, int d, const int* r, int t)
                X_data, &n, X_data + split, &n, &BLAS_ONE, C.data(), &d);
 
         // Max |C[j,k]| over strictly upper-triangular pairs (j < k), matching
-        // the pair set of the original scalar loops.
+        // the pair set of the original scalar loops.  Splitting the rotation
+        // into two GEMMs adds one rounding of the two partial sums, so allow
+        // one extra eps on top of the dot-product bound.
         double lambda_max = 0;
         for (int k = 1; k < d; k++) {
             const double* col = C.data() + static_cast<size_t>(k) * d;
             for (int j = 0; j < k; j++) {
                 double tmp = std::fabs(col[j]);
+                double bound = dot_gamma * col_norm[j] * col_norm[k];
+                bound += eps * bound + eps * tmp;
+                if (tmp <= bound) continue;
                 if (tmp > lambda_max) lambda_max = tmp;
             }
         }

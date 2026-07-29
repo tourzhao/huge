@@ -1,3 +1,20 @@
+# huge 2.0.1
+
+* Fixed a BLAS-dependent rounding issue in RIC selection. The rotated inner
+  products are computed with matrix products, and a conforming BLAS may return
+  any value inside a dot product's roundoff interval, so a mathematically zero
+  regularization parameter could come back as a tiny positive value. RIC now
+  certifies such values to exact zero using a pair-specific forward-error
+  bound, which is scale-aware and keeps correlations the working precision can
+  represent. Selected lambda values are therefore reproducible across BLAS
+  implementations. Reported by CRAN's ATLAS additional check.
+* `huge.select()` (R) and `huge_select()` (Python) no longer gate the
+  zero-lambda refit on a bitwise-zero lambda. A residual too small for a
+  solver to certify but not exactly zero previously bypassed the safety
+  fallback, which made graphical lasso fit rank-deficient data almost
+  unregularized and raise a non-finite estimate error. Routing now uses the
+  same roundoff scale in both packages.
+
 # huge 2.0.0
 
 * Added explicit input routing for square symmetric observation matrices:

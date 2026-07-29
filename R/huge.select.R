@@ -257,9 +257,16 @@ huge.select = function(est, criterion = NULL, ebic.gamma = 0.5, stars.thresh = 0
         # [[ ]] for exact-name access: est$cov would partial-match cov.input
         # on fits that lack a cov field (all methods except glasso+cov.output).
         refit.lambda = est$opt.lambda
-        zero.proxy = est$opt.lambda == 0 && est$method != "ct"
+        # Route on "too small for the solver to certify", not on a bitwise
+        # zero.  A conforming BLAS may return any value inside the rotated
+        # inner product's roundoff interval, so RIC's optimum can be a tiny
+        # positive residual rather than exactly 0 (observed with ATLAS).
+        # Comparing against the same roundoff scale keeps the fallback, and
+        # therefore the selected graph, identical across BLAS implementations.
+        zero.proxy = est$opt.lambda <= max(cor.offdiag) * dot.gamma &&
+          est$method != "ct"
         if(zero.proxy)
-          refit.lambda = .Machine$double.xmin
+          refit.lambda = max(est$opt.lambda, .Machine$double.xmin)
 
         tmp = if(zero.proxy) {
           tryCatch(
@@ -285,9 +292,9 @@ huge.select = function(est, criterion = NULL, ebic.gamma = 0.5, stars.thresh = 0
             est$opt.cov = est[["cov"]][[nearest]]
           warning(sprintf(
             paste(
-              "RIC selected lambda = 0, but the method could not certify",
-              "the smallest positive proxy; the original fitted path at",
-              "lambda %.17g was used."
+              "RIC selected lambda = 0 (within dot-product roundoff), but the",
+              "method could not certify the smallest positive proxy; the",
+              "original fitted path at lambda %.17g was used."
             ),
             est$lambda[[nearest]]
           ), call. = FALSE)

@@ -15,6 +15,41 @@ unsupported diagnostic pragma in R's own `R_ext/Boolean.h`, an unavailable
 `checkbashisms` executable, and inability to verify the current time. None is
 emitted by package code.
 
+## Submission
+
+This release fixes the ATLAS additional issue reported for 2.0.0
+(<https://www.stats.ox.ac.uk/pub/bdr/Rblas/ATLAS/huge.out>), which showed
+4 test failures in `tests/testthat/test-select.R`.
+
+RIC computes rotated inner products with BLAS matrix products. A conforming
+BLAS may return any value inside a dot product's roundoff interval, so a
+mathematically zero regularization parameter could be returned as a tiny
+positive value. Two defects followed from that:
+
+* The tiny value was reported as the selected lambda, so `opt.lambda` was no
+  longer exactly zero.
+* `huge.select()` gated its zero-lambda safety fallback on a bitwise-zero
+  lambda. The tiny value bypassed that fallback, so graphical lasso fitted
+  rank-deficient data almost unregularized and raised
+  "glasso produced non-finite estimates".
+
+RIC now certifies a rotated inner product to exact zero when its magnitude
+lies within that pair's standard dot-product forward-error bound
+(`gamma_n * ||u|| * ||v||`, `gamma_n = n*eps/(1 - n*eps)`), and the refit
+routing in both packages compares against the same roundoff scale rather than
+against zero. The bound is pair-specific and scale-aware, so it does not erase
+weak correlations that the working precision can represent; the existing test
+for a representable `1.5e-15` correlation still passes.
+
+We verified the fix by linking the core against a deliberately adversarial but
+conforming BLAS that returns the largest error the bound permits. That
+reproduces the reported failure on 2.0.0 in all 16 probed cases (cyclic shifts
+crossed with rescalings) and yields exact zero in all 16 with this release. New
+regression tests in `tests/testthat/test-regressions.R` pin both directions:
+numerical zeros stay certified, and representable weak correlations survive.
+
+No user-visible API changed.
+
 ## Reverse dependencies
 
 We checked all eight identified reverse dependencies: `heterocop`, `NetGreg`,
@@ -26,23 +61,3 @@ completed successfully; its full PDF build was unavailable because `pdflatex`
 was absent from that check container, while its remaining warning and notes
 are diagnostics from `nethet` itself. No new problems attributable to `huge`
 were found.
-
-## Submission
-
-This is a major update to version 2.0.0 focused on correctness, numerical
-validation, and bounded parallel execution.
-
-* TIGER now receives the original matrix and resolved input type in C++.
-  Covariance validation, correlation construction, automatic lambda selection,
-  and fitting therefore use the same native correlation matrix.
-* Glasso symmetrizes and verifies precision estimates, checks positive
-  definiteness, and certifies covariance/precision consistency. Indefinite
-  pairwise covariance estimates are accepted only when regularization produces
-  a certified result.
-* Auto-detected glasso covariance input retains the historical default-lambda
-  scale for compatibility. Explicit covariance input uses the corrected
-  off-diagonal scale; explicit lambda paths are unchanged.
-* Parallel StARS starts at most two workers. Package-owned OpenMP regions use
-  one thread in each child; the default remains serial.
-* Input and lambda-path validation, solver diagnostics, documentation, and
-  memory handling were also improved.

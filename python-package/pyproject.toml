@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyhuge"
-version = "2.0.0"
+version = "2.0.1"
 description = "Native Python package for high-dimensional undirected graph estimation"
 readme = "README.md"
 requires-python = ">=3.9"

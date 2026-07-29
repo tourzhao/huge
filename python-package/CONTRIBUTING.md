@@ -34,8 +34,8 @@ bash scripts/build_dist.sh
 ## Bump version and prepare release
 
 ```bash
-python scripts/bump_version.py 2.0.0
-bash scripts/release.sh 2.0.0
+python scripts/bump_version.py 2.0.1
+bash scripts/release.sh 2.0.1
 ```
 
 ## Code principles

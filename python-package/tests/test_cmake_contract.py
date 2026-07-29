@@ -1,5 +1,6 @@
 """Contracts for the standalone C++ core build and install interface."""
 
+import re
 from pathlib import Path
 
 
@@ -48,5 +49,15 @@ def test_ci_runs_the_installed_consumer_smoke():
     assert "for shared in OFF ON" in smoke
     assert "cmake --install" in smoke
     assert '-DEXPECT_HUGE_OPENMP="$expect_openmp"' in smoke
-    assert "find_package(huge 2.0.0 CONFIG REQUIRED)" in consumer
+    # Derive the version from CMakeLists.txt rather than hardcoding it, so a
+    # release bump cannot leave the consumer fixture pinned to a stale version.
+    project_version = re.search(
+        r"project\(huge VERSION ([0-9]+\.[0-9]+\.[0-9]+)",
+        (REPOSITORY_ROOT / "CMakeLists.txt").read_text(encoding="utf-8"),
+    )
+    assert project_version, "CMakeLists.txt must declare a project version"
+    assert (
+        f"find_package(huge {project_version.group(1)} CONFIG REQUIRED)"
+        in consumer
+    )
     assert "huge::huge_core" in consumer

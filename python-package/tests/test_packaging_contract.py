@@ -87,7 +87,7 @@ def test_release_documentation_uses_concrete_consistent_versions():
 
 
 def test_r_python_and_standalone_release_versions_are_aligned():
-    expected = "2.0.0"
+    expected = "2.0.1"
     escaped = re.escape(expected)
     files_and_patterns = (
         (PACKAGE_ROOT / "pyproject.toml", rf'(?m)^version = "{escaped}"$'),
